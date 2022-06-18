@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "SmarterStats - Yet Another RPC Framework"
-date:   2022-06-18 23:00:09 +0200
+date:   2022-06-18 00:00:09 +0200
 categories: vulns4free
 ---
 First of all, the SmarterTools team is pretty cool, a vendor I practice responsible disclosure with pleasure. I also needed some positive vendor vibes after my last experiences. I already worked with them successfully in the past. They provide a bunch of software products, one of them called [SmarterStats](https://www.smartertools.com/smarterstats/website-analytics): a web log analytics suite measuring the popularity of your websites given certain metrics. The installation of a trial version is straight forward and the code based on ASP .NET. The web interface can be reached at TCP port `9999`. According to [Censys.io](https://search.censys.io/search?resource=hosts&sort=RELEVANCE&per_page=25&virtual_hosts=EXCLUDE&q=SmarterStats) there exist **a few thousand instances** on the public internet with **several hundreds** also exposing TCP port `50003` (this will become relevant later). For our code audit we installed the latest version **Build 8011 (Dec 7, 2021)** available at that time. The patched version was published a few days ago (June 9th 2022) as **Build 8195**.
