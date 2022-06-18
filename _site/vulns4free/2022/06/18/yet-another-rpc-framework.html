@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.8.0 -->
+<title>SmarterStats - Yet Another RPC Framework | Frycos Security Diary</title>
+<meta name="generator" content="Jekyll v3.9.2" />
+<meta property="og:title" content="SmarterStats - Yet Another RPC Framework" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="First of all, the SmarterTools team is pretty cool, a vendor I practice responsible disclosure with pleasure. I also needed some positive vendor vibes after my last experiences. I already worked with them successfully in the past. They provide a bunch of software products, one of them called SmarterStats: a web log analytics suite measuring the popularity of your websites given certain metrics. The installation of a trial version is straight forward and the code based on ASP .NET. The web interface can be reached at TCP port 9999. According to Censys.io there exist a few thousand instances on the public internet with several hundreds also exposing TCP port 50003 (this will become relevant later). For our code audit we installed the latest version Build 8011 (Dec 7, 2021) available at that time. The patched version was published a few days ago (June 9th 2022) as Build 8195." />
+<meta property="og:description" content="First of all, the SmarterTools team is pretty cool, a vendor I practice responsible disclosure with pleasure. I also needed some positive vendor vibes after my last experiences. I already worked with them successfully in the past. They provide a bunch of software products, one of them called SmarterStats: a web log analytics suite measuring the popularity of your websites given certain metrics. The installation of a trial version is straight forward and the code based on ASP .NET. The web interface can be reached at TCP port 9999. According to Censys.io there exist a few thousand instances on the public internet with several hundreds also exposing TCP port 50003 (this will become relevant later). For our code audit we installed the latest version Build 8011 (Dec 7, 2021) available at that time. The patched version was published a few days ago (June 9th 2022) as Build 8195." />
+<link rel="canonical" href="http://localhost:4000/vulns4free/2022/06/18/yet-another-rpc-framework.html" />
+<meta property="og:url" content="http://localhost:4000/vulns4free/2022/06/18/yet-another-rpc-framework.html" />
+<meta property="og:site_name" content="Frycos Security Diary" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2022-06-18T23:00:09+02:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="SmarterStats - Yet Another RPC Framework" />
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BlogPosting","dateModified":"2022-06-18T23:00:09+02:00","datePublished":"2022-06-18T23:00:09+02:00","description":"First of all, the SmarterTools team is pretty cool, a vendor I practice responsible disclosure with pleasure. I also needed some positive vendor vibes after my last experiences. I already worked with them successfully in the past. They provide a bunch of software products, one of them called SmarterStats: a web log analytics suite measuring the popularity of your websites given certain metrics. The installation of a trial version is straight forward and the code based on ASP .NET. The web interface can be reached at TCP port 9999. According to Censys.io there exist a few thousand instances on the public internet with several hundreds also exposing TCP port 50003 (this will become relevant later). For our code audit we installed the latest version Build 8011 (Dec 7, 2021) available at that time. The patched version was published a few days ago (June 9th 2022) as Build 8195.","headline":"SmarterStats - Yet Another RPC Framework","mainEntityOfPage":{"@type":"WebPage","@id":"http://localhost:4000/vulns4free/2022/06/18/yet-another-rpc-framework.html"},"url":"http://localhost:4000/vulns4free/2022/06/18/yet-another-rpc-framework.html"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="http://localhost:4000/feed.xml" title="Frycos Security Diary" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">Frycos Security Diary</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">SmarterStats - Yet Another RPC Framework</h1>
+    <p class="post-meta">
+      <time class="dt-published" datetime="2022-06-18T23:00:09+02:00" itemprop="datePublished">Jun 18, 2022
+      </time></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>First of all, the SmarterTools team is pretty cool, a vendor I practice responsible disclosure with pleasure. I also needed some positive vendor vibes after my last experiences. I already worked with them successfully in the past. They provide a bunch of software products, one of them called <a href="https://www.smartertools.com/smarterstats/website-analytics">SmarterStats</a>: a web log analytics suite measuring the popularity of your websites given certain metrics. The installation of a trial version is straight forward and the code based on ASP .NET. The web interface can be reached at TCP port <code class="language-plaintext highlighter-rouge">9999</code>. According to <a href="https://search.censys.io/search?resource=hosts&amp;sort=RELEVANCE&amp;per_page=25&amp;virtual_hosts=EXCLUDE&amp;q=SmarterStats">Censys.io</a> there exist <strong>a few thousand instances</strong> on the public internet with <strong>several hundreds</strong> also exposing TCP port <code class="language-plaintext highlighter-rouge">50003</code> (this will become relevant later). For our code audit we installed the latest version <strong>Build 8011 (Dec 7, 2021)</strong> available at that time. The patched version was published a few days ago (June 9th 2022) as <strong>Build 8195</strong>.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog1.png" alt="Login" /></p>
+
+<p>First, I usually check the IIS manager <code class="language-plaintext highlighter-rouge">inetmgr</code> for the deployment structure, web root directories etc.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog2.png" alt="Deployment structure" /></p>
+
+<p>Second, the <code class="language-plaintext highlighter-rouge">inetmgr</code> lists the <strong>HTTP handlers</strong> for which we’re especially interested in <em>custom</em> handlers.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog3.png" alt="HTTP Handlers" /></p>
+
+<p>Even more interesting are <strong>HTTP modules</strong> because according to the ASP .NET workflow, these are usually called <em>before any authentication checks</em> trigger. A nice example for this kind of entry-point leading to Pre-Auth Remote Code Execution (RCE) was shown by my colleague <a href="https://codewhitesec.blogspot.com/2021/09/citrix-sharefile-rce-cve-2021-22941.html">in this blog on Citrix ShareFile</a>. Unfortunately, no custom HTTP modules can be identified for SmarterStats.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog4.png" alt="HTTP Modules" /></p>
+
+<p>Next, we check for all <code class="language-plaintext highlighter-rouge">.aspx</code>, <code class="language-plaintext highlighter-rouge">.ascx</code> and <code class="language-plaintext highlighter-rouge">.asmx</code>  files in <code class="language-plaintext highlighter-rouge">C:\Program Files (x86)\SmarterTools\SmarterStats\MRS</code> for potential vulnerabilities. As you might notice, most of these files contain references to C# code base such as </p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>&lt;%@ WebService Language="C#" CodeBehind="UserAdmin.asmx.cs" Class="SSWeb.Services.UserAdmin" %&gt;
+</code></pre></div></div>
+
+<p>So, you search for the proper IIS worker process <code class="language-plaintext highlighter-rouge">w3wp.exe</code> serving your SmarterStats application and load it into <em>dnSpy</em>. Then load all the modules related to the process and sort the .NET assemblies for a first overview. I like to sort them because it’s a quick visual check for <em>custom vs. .NET framework assemblies</em> by name.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog5.png" alt="Assemblies" /></p>
+
+<p>Remember to browse the application before attaching to the IIS worker process. Otherwise, you might not see all the “cryptic” <code class="language-plaintext highlighter-rouge">Asp_Web_junk</code> modules with their corresponding .NET code.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog6.png" alt="ASP Assemblies" /></p>
+
+<p>After digging through some code, I realize that our ultimate goal <strong>“Pre-Auth RCE”</strong> is at risk. But we only checked the web-interface at TCP port <code class="language-plaintext highlighter-rouge">9999</code> so far. Back in 2020 I reported another Pre-Auth RCE for SmarterStats affecting a service available at TCP port <code class="language-plaintext highlighter-rouge">50003</code>. This was fixed in <a href="https://www.smartertools.com/smarterstats/release-notes/current">Build 7422 (Apr 27, 2020)</a>. Back then, the RCE was based on the fact that they used <strong>.NET Remoting</strong>. So, let’s check if this port is still used by a SmarterStats process <strong>by default</strong> after a fresh installation. <em>Sysinternals TCPView</em> says “yes”.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog7.png" alt="Port 50003" /></p>
+
+<p>Loading the process <code class="language-plaintext highlighter-rouge">SSSvc.exe</code> into <em>dnSpy</em> again, let’s investigate how this works under the hood. It quickly becomes clear that .NET Remoting <em>is not used anymore</em> which is good, right?</p>
+
+<p>The module name shown in TCPView was called <code class="language-plaintext highlighter-rouge">SSCollect</code> so we search for this module in the code base. We find <code class="language-plaintext highlighter-rouge">SStatSvc.SSCollect</code> extending <code class="language-plaintext highlighter-rouge">System.ServiceProcess.ServiceBase</code>. The <code class="language-plaintext highlighter-rouge">ServiceBase.OnStart(string[] args)</code> method is overridden by <code class="language-plaintext highlighter-rouge">SSCollect</code>.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog8.png" alt="Service Start" /></p>
+
+<p>Let’s follow the <code class="language-plaintext highlighter-rouge">ServiceWorker.StartService()</code> which calls <code class="language-plaintext highlighter-rouge">ServiceWorker._serviceLifetimeThread = new Thread(new ThreadStart(ServiceWorker.ServiceLifetimeFunction))</code> ending in a <code class="language-plaintext highlighter-rouge">ServiceWorker.Start()</code>.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog9.png" alt="Service Thread Start" /></p>
+
+<p>Here, things are getting more specific and interesting. During this initialization procedure we find a call to <code class="language-plaintext highlighter-rouge">GrpcManager.StartGrpc()</code> which nicely matches with a set of assemblies we spotted after loading all modules used by the <code class="language-plaintext highlighter-rouge">SSSvc.exe</code> process: <code class="language-plaintext highlighter-rouge">Grpc.Core.dll</code> and <code class="language-plaintext highlighter-rouge">Grpc.Core.Api.dll</code>.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog10.png" alt="Start Grpc" /></p>
+
+<p>We have some classes with namespace prefix <code class="language-plaintext highlighter-rouge">SmarterStats.Config.Protos</code> calling <code class="language-plaintext highlighter-rouge">BindService</code> methods with distinct implementation classes. We also spot the TCP port <code class="language-plaintext highlighter-rouge">50003</code> and another interesting fact giving us confidence for another Pre-Auth chance: <a href="https://grpc.io/docs/guides/auth/"><code class="language-plaintext highlighter-rouge">ServerCredentials.Insecure</code></a>.</p>
+
+<p>I already heard about <strong>gRPC and protocol buffers</strong> before but honestly didn’t look into programmatic approaches too much. So what to do first? Reading documentation like a beginner. I start with <a href="https://grpc.io/docs/what-is-grpc/introduction/">this</a>, telling me something about <strong>remote method invocation</strong>. From a security research perspective, this topic is often related to Java (RMI), .NET (Remoting) and more. gRPC uses so called protocol buffers by default to send serialized data over the wire. But <em>this is not as dangerous as you might think</em>. Data structures for automatically generated client stubs and server service skeletons are derived from <code class="language-plaintext highlighter-rouge">.proto</code> files.</p>
+
+<p>Unfortunately, we don’t have these files…so let’s look into the server code again. Starting with the first gRPC type <code class="language-plaintext highlighter-rouge">SmarterStats.Config.Protos.Query</code> we see something interesting.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog11.png" alt="Query Type" /></p>
+
+<p>There is a class named <code class="language-plaintext highlighter-rouge">SmarterStats.Config.Protos.QueryClient</code>. Hooray! We try to find the implementation now through all these <code class="language-plaintext highlighter-rouge">virtual, abstract, override</code> function definitions. We start again in <code class="language-plaintext highlighter-rouge">SmarterStats.Config.Protos.Query</code> where the method <code class="language-plaintext highlighter-rouge">BindService(ServiceBinderBase serviceBinder, Query.QueryBase serviceImpl)</code> is implemented.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog12.png" alt="BindService" /></p>
+
+<p>Choosing one random function of this specific service, virtual functions such as <code class="language-plaintext highlighter-rouge">Task&lt;GetAvailableQueriesWithInputsReply&gt; GetAvailableQueriesWithInputs(GetAvailableQueriesWithInputsRequest request, ServerCallContext context)</code> bring us a step further to the real business code.</p>
+
+<p>In <code class="language-plaintext highlighter-rouge">SStatSvc.Communication.QueryServiceImplementation</code> this function is overridden</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog13.png" alt="QueriesWithInput" /></p>
+
+<p>and we finally reach the business code</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog14.png" alt="Business Code" /></p>
+
+<p>The request input class <code class="language-plaintext highlighter-rouge">SmarterStats.Config.Protos.GetAvailableQueriesWithInputsRequest</code> seems to be pretty empty, i.e. no obvious user-controllable attributes exist. But this is somehow expected since the remote method name <code class="language-plaintext highlighter-rouge">GetAvailableQueries</code> indicates that probably no further input is needed. Fine, now how do we get a working client running?</p>
+
+<p>The documentation <a href="https://grpc.io/docs/languages/csharp/basics/">“A basic tutorial introduction to gRPC in C#”</a> sounds like a good starting point. We clone the example project <a href="https://github.com/grpc/grpc/tree/v1.45.0/examples/csharp/RouteGuide">RoutingGuide</a> and try to understand the project structure and code within. Also I’m <strong>really lazy</strong> which means… simply reuse the code to create a SmarterStats client.</p>
+
+<p>We directly switch to the <em>RouteGuideClient</em> part of the Visual Studio solution. gRPC assemblies are already set up for us so only the <strong>SmarterStats types</strong> are needed. Checking with dnSpy again, we then add the reference <code class="language-plaintext highlighter-rouge">C:\Program Files (x86)\SmarterTools\SmarterStats\Service\SmarterStats.Config.dll</code> to our solution.</p>
+
+<p>Let’s write some really dumm code (I’m allowed to do this because I worked as a software developer years ago (⌐ ͡■ ͜ʖ ͡■)).</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog15.png" alt="Client Code" /></p>
+
+<p>Running our “meaningless” <code class="language-plaintext highlighter-rouge">RouteGuideClient.exe</code> works!</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog16.png" alt="Running Query Client" /></p>
+
+<p>Now, let’s hunt for some <strong>Pre-Auth RCE bugs!</strong> We go through all binding service implementations step by step and stop at <code class="language-plaintext highlighter-rouge">SStatSvc.Communication.ServiceOperationsServiceImplementation</code> because it contains a lot of interestingly sounding methods. The method <code class="language-plaintext highlighter-rouge">GetExportedLogsForSite(GetExportedLogsForSiteRequest request, IServerStreamWriter&lt;GetExportedLogsForSiteResponse&gt; responseStream, ServerCallContext context)</code> e.g. has the word “Export” in it.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog17.png" alt="Export Logs Code" /></p>
+
+<p>The call <code class="language-plaintext highlighter-rouge">Path.Combine(Constants.ServiceTemporaryDirectory, this.request.FileToDownload)</code> already tells us everything we want to know: <strong>user-controlled file name + path traversal</strong> opportunity?! Let’s test this with our new gRPC knowledge.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog18.png" alt="Export Logs Client" /></p>
+
+<p>And indeed, we can read the configuration file with credentials and a bunch of sensitive information.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog19.png" alt="Run Export Logs Client" /></p>
+
+<p>What <code class="language-plaintext highlighter-rouge">Path.Combine</code> can do for you (in different flavors), have a look at my previous blog on <a href="https://medium.com/p/pwning-3cx-phone-management-backends-from-the-internet-d0096339dd88">3CX Pwnage</a>. <strong>Pre-Auth Arbitrary File Read</strong> as <code class="language-plaintext highlighter-rouge">NT AUTHORITY\SYSTEM</code> achieved.</p>
+
+<p>So what would be a good method candidate for Remote Code Execution then? <code class="language-plaintext highlighter-rouge">SaveFileTo(SaveFileToRequest request, ServerCallContext context)</code> sounds promising.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog20.png" alt="SaveFileTo Code" /></p>
+
+<p>But the <strong>“Unauthorized to copy”</strong> could become a problem. Let’s see if it really is. The authorization check consists of taking a request parameter <code class="language-plaintext highlighter-rouge">this.request.Auth</code> and puts it into a “crypto check” <code class="language-plaintext highlighter-rouge">cryptographyHelper.DecodeFromBase64</code> method. The result has to match our user-controlled value <code class="language-plaintext highlighter-rouge">this.request.Filename</code>. The <code class="language-plaintext highlighter-rouge">DecodeFromBase64</code> method indeed decodes the value from a Base64 format and operates with some crypto on the result.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog21.png" alt="Decode and Crypto" /></p>
+
+<p>But did you also spot the <code class="language-plaintext highlighter-rouge">cryptographyHelper.SetKey(creationTime.ToString("MMddyyyy") + " ksghsfkgjh", null)</code>? Yes, <code class="language-plaintext highlighter-rouge">creationTime</code> comes from <code class="language-plaintext highlighter-rouge">this.request.CreationDate.ToDateTime()</code> which <strong>we control as well</strong>. Does this mean we control the crypto key and initialization vector? Let’s write some more ugly code.</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog24.png" alt="SaveToFile Client Code" /></p>
+
+<p>Execute the modified client</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog22.png" alt="Run SaveToFile Client" /></p>
+
+<p>and we have written a file</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog23.png" alt="Shell Written" /></p>
+
+<p>which can be called</p>
+
+<p><img src="/assets/images/smarterstats/SmarterStatsBlog25.png" alt="Web Shell" /></p>
+
+<p>giving us <strong>Pre-Auth Remote Code Execution</strong> again. At the end of the day, we found a second Pre-Auth RCE for the service at TCP port <code class="language-plaintext highlighter-rouge">50003</code> (2020, 2022).</p>
+
+<p>P.S.: I didn’t check all the other gRPC binding implementations but rather told the vendor to check the others for similar flaws themselves. Maybe you can find others! What I <em>did</em> see was a small opportunity for another Pre-Auth RCE in the patched version. Can you spot it as well?</p>
+
+  </div><a class="u-url" href="/vulns4free/2022/06/18/yet-another-rpc-framework.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">Frycos Security Diary</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">Frycos Security Diary</li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/frycos"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg> <span class="username">frycos</span></a></li><li><a href="https://www.twitter.com/frycos"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#twitter"></use></svg> <span class="username">frycos</span></a></li></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>Blogging mainly</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>

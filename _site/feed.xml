@@ -1,4 +1,127 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.2">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2022-05-24T23:53:28+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Frycos Security Diary</title><subtitle>Blogging mainly</subtitle><entry><title type="html">Security Code Audit - For Fun and Fails</title><link href="http://localhost:4000/vulns4free/2022/05/24/security-code-audit-fails.html" rel="alternate" type="text/html" title="Security Code Audit - For Fun and Fails" /><published>2022-05-24T23:00:09+02:00</published><updated>2022-05-24T23:00:09+02:00</updated><id>http://localhost:4000/vulns4free/2022/05/24/security-code-audit-fails</id><content type="html" xml:base="http://localhost:4000/vulns4free/2022/05/24/security-code-audit-fails.html">&lt;p&gt;Recently, I asked the Twitter community if anyone would be interested in a blog post about “failed” security code audit attempts.
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.2">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2022-06-18T16:31:18+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Frycos Security Diary</title><subtitle>Blogging mainly</subtitle><entry><title type="html">SmarterStats - Yet Another RPC Framework</title><link href="http://localhost:4000/vulns4free/2022/06/18/yet-another-rpc-framework.html" rel="alternate" type="text/html" title="SmarterStats - Yet Another RPC Framework" /><published>2022-06-18T23:00:09+02:00</published><updated>2022-06-18T23:00:09+02:00</updated><id>http://localhost:4000/vulns4free/2022/06/18/yet-another-rpc-framework</id><content type="html" xml:base="http://localhost:4000/vulns4free/2022/06/18/yet-another-rpc-framework.html">&lt;p&gt;First of all, the SmarterTools team is pretty cool, a vendor I practice responsible disclosure with pleasure. I also needed some positive vendor vibes after my last experiences. I already worked with them successfully in the past. They provide a bunch of software products, one of them called &lt;a href=&quot;https://www.smartertools.com/smarterstats/website-analytics&quot;&gt;SmarterStats&lt;/a&gt;: a web log analytics suite measuring the popularity of your websites given certain metrics. The installation of a trial version is straight forward and the code based on ASP .NET. The web interface can be reached at TCP port &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;9999&lt;/code&gt;. According to &lt;a href=&quot;https://search.censys.io/search?resource=hosts&amp;amp;sort=RELEVANCE&amp;amp;per_page=25&amp;amp;virtual_hosts=EXCLUDE&amp;amp;q=SmarterStats&quot;&gt;Censys.io&lt;/a&gt; there exist &lt;strong&gt;a few thousand instances&lt;/strong&gt; on the public internet with &lt;strong&gt;several hundreds&lt;/strong&gt; also exposing TCP port &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;50003&lt;/code&gt; (this will become relevant later). For our code audit we installed the latest version &lt;strong&gt;Build 8011 (Dec 7, 2021)&lt;/strong&gt; available at that time. The patched version was published a few days ago (June 9th 2022) as &lt;strong&gt;Build 8195&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog1.png&quot; alt=&quot;Login&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;First, I usually check the IIS manager &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;inetmgr&lt;/code&gt; for the deployment structure, web root directories etc.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog2.png&quot; alt=&quot;Deployment structure&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Second, the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;inetmgr&lt;/code&gt; lists the &lt;strong&gt;HTTP handlers&lt;/strong&gt; for which we’re especially interested in &lt;em&gt;custom&lt;/em&gt; handlers.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog3.png&quot; alt=&quot;HTTP Handlers&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Even more interesting are &lt;strong&gt;HTTP modules&lt;/strong&gt; because according to the ASP .NET workflow, these are usually called &lt;em&gt;before any authentication checks&lt;/em&gt; trigger. A nice example for this kind of entry-point leading to Pre-Auth Remote Code Execution (RCE) was shown by my colleague &lt;a href=&quot;https://codewhitesec.blogspot.com/2021/09/citrix-sharefile-rce-cve-2021-22941.html&quot;&gt;in this blog on Citrix ShareFile&lt;/a&gt;. Unfortunately, no custom HTTP modules can be identified for SmarterStats.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog4.png&quot; alt=&quot;HTTP Modules&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Next, we check for all &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.aspx&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.ascx&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.asmx&lt;/code&gt;  files in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;C:\Program Files (x86)\SmarterTools\SmarterStats\MRS&lt;/code&gt; for potential vulnerabilities. As you might notice, most of these files contain references to C# code base such as &lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&amp;lt;%@ WebService Language=&quot;C#&quot; CodeBehind=&quot;UserAdmin.asmx.cs&quot; Class=&quot;SSWeb.Services.UserAdmin&quot; %&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;So, you search for the proper IIS worker process &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;w3wp.exe&lt;/code&gt; serving your SmarterStats application and load it into &lt;em&gt;dnSpy&lt;/em&gt;. Then load all the modules related to the process and sort the .NET assemblies for a first overview. I like to sort them because it’s a quick visual check for &lt;em&gt;custom vs. .NET framework assemblies&lt;/em&gt; by name.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog5.png&quot; alt=&quot;Assemblies&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Remember to browse the application before attaching to the IIS worker process. Otherwise, you might not see all the “cryptic” &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Asp_Web_junk&lt;/code&gt; modules with their corresponding .NET code.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog6.png&quot; alt=&quot;ASP Assemblies&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;After digging through some code, I realize that our ultimate goal &lt;strong&gt;“Pre-Auth RCE”&lt;/strong&gt; is at risk. But we only checked the web-interface at TCP port &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;9999&lt;/code&gt; so far. Back in 2020 I reported another Pre-Auth RCE for SmarterStats affecting a service available at TCP port &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;50003&lt;/code&gt;. This was fixed in &lt;a href=&quot;https://www.smartertools.com/smarterstats/release-notes/current&quot;&gt;Build 7422 (Apr 27, 2020)&lt;/a&gt;. Back then, the RCE was based on the fact that they used &lt;strong&gt;.NET Remoting&lt;/strong&gt;. So, let’s check if this port is still used by a SmarterStats process &lt;strong&gt;by default&lt;/strong&gt; after a fresh installation. &lt;em&gt;Sysinternals TCPView&lt;/em&gt; says “yes”.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog7.png&quot; alt=&quot;Port 50003&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Loading the process &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SSSvc.exe&lt;/code&gt; into &lt;em&gt;dnSpy&lt;/em&gt; again, let’s investigate how this works under the hood. It quickly becomes clear that .NET Remoting &lt;em&gt;is not used anymore&lt;/em&gt; which is good, right?&lt;/p&gt;
+
+&lt;p&gt;The module name shown in TCPView was called &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SSCollect&lt;/code&gt; so we search for this module in the code base. We find &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SStatSvc.SSCollect&lt;/code&gt; extending &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;System.ServiceProcess.ServiceBase&lt;/code&gt;. The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;ServiceBase.OnStart(string[] args)&lt;/code&gt; method is overridden by &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SSCollect&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog8.png&quot; alt=&quot;Service Start&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Let’s follow the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;ServiceWorker.StartService()&lt;/code&gt; which calls &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;ServiceWorker._serviceLifetimeThread = new Thread(new ThreadStart(ServiceWorker.ServiceLifetimeFunction))&lt;/code&gt; ending in a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;ServiceWorker.Start()&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog9.png&quot; alt=&quot;Service Thread Start&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Here, things are getting more specific and interesting. During this initialization procedure we find a call to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;GrpcManager.StartGrpc()&lt;/code&gt; which nicely matches with a set of assemblies we spotted after loading all modules used by the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SSSvc.exe&lt;/code&gt; process: &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Grpc.Core.dll&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Grpc.Core.Api.dll&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog10.png&quot; alt=&quot;Start Grpc&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;We have some classes with namespace prefix &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SmarterStats.Config.Protos&lt;/code&gt; calling &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;BindService&lt;/code&gt; methods with distinct implementation classes. We also spot the TCP port &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;50003&lt;/code&gt; and another interesting fact giving us confidence for another Pre-Auth chance: &lt;a href=&quot;https://grpc.io/docs/guides/auth/&quot;&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;ServerCredentials.Insecure&lt;/code&gt;&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;I already heard about &lt;strong&gt;gRPC and protocol buffers&lt;/strong&gt; before but honestly didn’t look into programmatic approaches too much. So what to do first? Reading documentation like a beginner. I start with &lt;a href=&quot;https://grpc.io/docs/what-is-grpc/introduction/&quot;&gt;this&lt;/a&gt;, telling me something about &lt;strong&gt;remote method invocation&lt;/strong&gt;. From a security research perspective, this topic is often related to Java (RMI), .NET (Remoting) and more. gRPC uses so called protocol buffers by default to send serialized data over the wire. But &lt;em&gt;this is not as dangerous as you might think&lt;/em&gt;. Data structures for automatically generated client stubs and server service skeletons are derived from &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.proto&lt;/code&gt; files.&lt;/p&gt;
+
+&lt;p&gt;Unfortunately, we don’t have these files…so let’s look into the server code again. Starting with the first gRPC type &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SmarterStats.Config.Protos.Query&lt;/code&gt; we see something interesting.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog11.png&quot; alt=&quot;Query Type&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;There is a class named &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SmarterStats.Config.Protos.QueryClient&lt;/code&gt;. Hooray! We try to find the implementation now through all these &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;virtual, abstract, override&lt;/code&gt; function definitions. We start again in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SmarterStats.Config.Protos.Query&lt;/code&gt; where the method &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;BindService(ServiceBinderBase serviceBinder, Query.QueryBase serviceImpl)&lt;/code&gt; is implemented.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog12.png&quot; alt=&quot;BindService&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Choosing one random function of this specific service, virtual functions such as &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Task&amp;lt;GetAvailableQueriesWithInputsReply&amp;gt; GetAvailableQueriesWithInputs(GetAvailableQueriesWithInputsRequest request, ServerCallContext context)&lt;/code&gt; bring us a step further to the real business code.&lt;/p&gt;
+
+&lt;p&gt;In &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SStatSvc.Communication.QueryServiceImplementation&lt;/code&gt; this function is overridden&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog13.png&quot; alt=&quot;QueriesWithInput&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;and we finally reach the business code&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog14.png&quot; alt=&quot;Business Code&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The request input class &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SmarterStats.Config.Protos.GetAvailableQueriesWithInputsRequest&lt;/code&gt; seems to be pretty empty, i.e. no obvious user-controllable attributes exist. But this is somehow expected since the remote method name &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;GetAvailableQueries&lt;/code&gt; indicates that probably no further input is needed. Fine, now how do we get a working client running?&lt;/p&gt;
+
+&lt;p&gt;The documentation &lt;a href=&quot;https://grpc.io/docs/languages/csharp/basics/&quot;&gt;“A basic tutorial introduction to gRPC in C#”&lt;/a&gt; sounds like a good starting point. We clone the example project &lt;a href=&quot;https://github.com/grpc/grpc/tree/v1.45.0/examples/csharp/RouteGuide&quot;&gt;RoutingGuide&lt;/a&gt; and try to understand the project structure and code within. Also I’m &lt;strong&gt;really lazy&lt;/strong&gt; which means… simply reuse the code to create a SmarterStats client.&lt;/p&gt;
+
+&lt;p&gt;We directly switch to the &lt;em&gt;RouteGuideClient&lt;/em&gt; part of the Visual Studio solution. gRPC assemblies are already set up for us so only the &lt;strong&gt;SmarterStats types&lt;/strong&gt; are needed. Checking with dnSpy again, we then add the reference &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;C:\Program Files (x86)\SmarterTools\SmarterStats\Service\SmarterStats.Config.dll&lt;/code&gt; to our solution.&lt;/p&gt;
+
+&lt;p&gt;Let’s write some really dumm code (I’m allowed to do this because I worked as a software developer years ago (⌐ ͡■ ͜ʖ ͡■)).&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog15.png&quot; alt=&quot;Client Code&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Running our “meaningless” &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;RouteGuideClient.exe&lt;/code&gt; works!&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog16.png&quot; alt=&quot;Running Query Client&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Now, let’s hunt for some &lt;strong&gt;Pre-Auth RCE bugs!&lt;/strong&gt; We go through all binding service implementations step by step and stop at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SStatSvc.Communication.ServiceOperationsServiceImplementation&lt;/code&gt; because it contains a lot of interestingly sounding methods. The method &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;GetExportedLogsForSite(GetExportedLogsForSiteRequest request, IServerStreamWriter&amp;lt;GetExportedLogsForSiteResponse&amp;gt; responseStream, ServerCallContext context)&lt;/code&gt; e.g. has the word “Export” in it.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog17.png&quot; alt=&quot;Export Logs Code&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The call &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Path.Combine(Constants.ServiceTemporaryDirectory, this.request.FileToDownload)&lt;/code&gt; already tells us everything we want to know: &lt;strong&gt;user-controlled file name + path traversal&lt;/strong&gt; opportunity?! Let’s test this with our new gRPC knowledge.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog18.png&quot; alt=&quot;Export Logs Client&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;And indeed, we can read the configuration file with credentials and a bunch of sensitive information.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog19.png&quot; alt=&quot;Run Export Logs Client&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;What &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Path.Combine&lt;/code&gt; can do for you (in different flavors), have a look at my previous blog on &lt;a href=&quot;https://medium.com/p/pwning-3cx-phone-management-backends-from-the-internet-d0096339dd88&quot;&gt;3CX Pwnage&lt;/a&gt;. &lt;strong&gt;Pre-Auth Arbitrary File Read&lt;/strong&gt; as &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;NT AUTHORITY\SYSTEM&lt;/code&gt; achieved.&lt;/p&gt;
+
+&lt;p&gt;So what would be a good method candidate for Remote Code Execution then? &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SaveFileTo(SaveFileToRequest request, ServerCallContext context)&lt;/code&gt; sounds promising.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog20.png&quot; alt=&quot;SaveFileTo Code&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;But the &lt;strong&gt;“Unauthorized to copy”&lt;/strong&gt; could become a problem. Let’s see if it really is. The authorization check consists of taking a request parameter &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;this.request.Auth&lt;/code&gt; and puts it into a “crypto check” &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;cryptographyHelper.DecodeFromBase64&lt;/code&gt; method. The result has to match our user-controlled value &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;this.request.Filename&lt;/code&gt;. The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;DecodeFromBase64&lt;/code&gt; method indeed decodes the value from a Base64 format and operates with some crypto on the result.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog21.png&quot; alt=&quot;Decode and Crypto&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;But did you also spot the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;cryptographyHelper.SetKey(creationTime.ToString(&quot;MMddyyyy&quot;) + &quot; ksghsfkgjh&quot;, null)&lt;/code&gt;? Yes, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;creationTime&lt;/code&gt; comes from &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;this.request.CreationDate.ToDateTime()&lt;/code&gt; which &lt;strong&gt;we control as well&lt;/strong&gt;. Does this mean we control the crypto key and initialization vector? Let’s write some more ugly code.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog24.png&quot; alt=&quot;SaveToFile Client Code&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Execute the modified client&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog22.png&quot; alt=&quot;Run SaveToFile Client&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;and we have written a file&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog23.png&quot; alt=&quot;Shell Written&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;which can be called&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/smarterstats/SmarterStatsBlog25.png&quot; alt=&quot;Web Shell&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;giving us &lt;strong&gt;Pre-Auth Remote Code Execution&lt;/strong&gt; again. At the end of the day, we found a second Pre-Auth RCE for the service at TCP port &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;50003&lt;/code&gt; (2020, 2022).&lt;/p&gt;
+
+&lt;p&gt;P.S.: I didn’t check all the other gRPC binding implementations but rather told the vendor to check the others for similar flaws themselves. Maybe you can find others! What I &lt;em&gt;did&lt;/em&gt; see was a small opportunity for another Pre-Auth RCE in the patched version. Can you spot it as well?&lt;/p&gt;</content><author><name></name></author><category term="vulns4free" /><summary type="html">First of all, the SmarterTools team is pretty cool, a vendor I practice responsible disclosure with pleasure. I also needed some positive vendor vibes after my last experiences. I already worked with them successfully in the past. They provide a bunch of software products, one of them called SmarterStats: a web log analytics suite measuring the popularity of your websites given certain metrics. The installation of a trial version is straight forward and the code based on ASP .NET. The web interface can be reached at TCP port 9999. According to Censys.io there exist a few thousand instances on the public internet with several hundreds also exposing TCP port 50003 (this will become relevant later). For our code audit we installed the latest version Build 8011 (Dec 7, 2021) available at that time. The patched version was published a few days ago (June 9th 2022) as Build 8195.</summary></entry><entry><title type="html">Security Code Audit - For Fun and Fails</title><link href="http://localhost:4000/vulns4free/2022/05/24/security-code-audit-fails.html" rel="alternate" type="text/html" title="Security Code Audit - For Fun and Fails" /><published>2022-05-24T23:00:09+02:00</published><updated>2022-05-24T23:00:09+02:00</updated><id>http://localhost:4000/vulns4free/2022/05/24/security-code-audit-fails</id><content type="html" xml:base="http://localhost:4000/vulns4free/2022/05/24/security-code-audit-fails.html">&lt;p&gt;Recently, I asked the Twitter community if anyone would be interested in a blog post about “failed” security code audit attempts.
 A lot of you seemed to like this idea, so here it is. I was somehow afraid to make a fool out of myself with this blog post
 but sometimes it seems that everybody thinks that security code audits are kind of “rocket science”.
 Usually it goes like this: the professionals choose some high-value target and achieving Pre-Auth Remote Code Executions (RCE) should be the golden standard. And also
