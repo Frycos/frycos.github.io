@@ -1,4 +1,160 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2022-09-22T23:24:31+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Frycos Security Diary</title><subtitle>Blogging mainly</subtitle><entry><title type="html">Skype for Business Audit Part 1 - SKYPErsistence</title><link href="http://localhost:4000/vulns4free/2022/09/22/skype-audit-part1.html" rel="alternate" type="text/html" title="Skype for Business Audit Part 1 - SKYPErsistence" /><published>2022-09-22T23:00:00+02:00</published><updated>2022-09-22T23:00:00+02:00</updated><id>http://localhost:4000/vulns4free/2022/09/22/skype-audit-part1</id><content type="html" xml:base="http://localhost:4000/vulns4free/2022/09/22/skype-audit-part1.html">&lt;p&gt;In this blog post I’ll introduce the first of two findings affecting the latest patched version of &lt;strong&gt;Skype for Business 2019&lt;/strong&gt;.
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2022-09-26T23:28:46+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Frycos Security Diary</title><subtitle>Blogging mainly</subtitle><entry><title type="html">Skype for Business Audit Part 2 - SKYPErimeterleak</title><link href="http://localhost:4000/vulns4free/2022/09/26/skype-audit-part2.html" rel="alternate" type="text/html" title="Skype for Business Audit Part 2 - SKYPErimeterleak" /><published>2022-09-26T23:00:00+02:00</published><updated>2022-09-26T23:00:00+02:00</updated><id>http://localhost:4000/vulns4free/2022/09/26/skype-audit-part2</id><content type="html" xml:base="http://localhost:4000/vulns4free/2022/09/26/skype-audit-part2.html">&lt;p&gt;In my last &lt;a href=&quot;https://frycos.github.io/vulns4free/2022/09/22/skype-audit-part1.html&quot;&gt;blog post&lt;/a&gt; we talked about a new &lt;em&gt;persistence technique&lt;/em&gt; in &lt;strong&gt;Skype for Business 2019 (SfB)&lt;/strong&gt; found during my code audit. Now, I give a short code walk-through
+about an &lt;strong&gt;Pre-Auth Server-side Request Forgery (SSRF)&lt;/strong&gt; vulnerability which could easily lead to an internet perimeter breach.
+But let’s start from the beginning.&lt;/p&gt;
+
+&lt;p&gt;We still have the same setup, i.e. an Active Directory (AD) &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;CONTOSO.COM&lt;/code&gt; with a SfB installation on a system &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SKYPE01&lt;/code&gt;.
+But this time, we’re looking for a vulnerability instead of a persistence technique for Red Teams.
+Since the &lt;a href=&quot;https://www.microsoft.com/en-us/msrc&quot;&gt;MSRC&lt;/a&gt; rejected my submission for this vulnerability with a “not meeting the bar” argument, I told them to publish a blog post instead.&lt;/p&gt;
+
+&lt;p&gt;We look again with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;InetMgr.exe&lt;/code&gt; at the Application Pool and URI path configurations.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/skypethings/skype_inetmgr.png&quot; alt=&quot;InetMgr&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Since we mentioned the term “internet perimeter breach” above, the focus will again be on the “External Web Site” configurations.
+The target we chose was the URI path &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/lwa&lt;/code&gt; which stands for &lt;strong&gt;Lync Web App&lt;/strong&gt;. The corresponding App Pool is named &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;LyncExtFeature&lt;/code&gt;.
+The file system location of interest can usally be found at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;C:\Program Files\Skype for Business Server 2019\Web Components\LWA\Ext&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;In the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Web.config&lt;/code&gt; file the following declaration is made:&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nt&quot;&gt;&amp;lt;defaultDocument&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;nt&quot;&gt;&amp;lt;files&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;nt&quot;&gt;&amp;lt;clear/&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;nt&quot;&gt;&amp;lt;add&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;value=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;LwaClient.aspx&quot;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;/&amp;gt;&lt;/span&gt;
+    &lt;span class=&quot;nt&quot;&gt;&amp;lt;/files&amp;gt;&lt;/span&gt;
+&lt;span class=&quot;nt&quot;&gt;&amp;lt;/defaultDocument&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The ASPX file mentioned is located at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;C:\Program Files\Skype for Business Server 2019\Web Components\LWA\Ext\WebPages&lt;/code&gt;
+and the first line reads:&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;err&quot;&gt;&amp;lt;&lt;/span&gt;%@ Page Language=&quot;C#&quot; AutoEventWireup=&quot;true&quot; CodeBehind=&quot;LwaClient.aspx.cs&quot; Inherits=&quot;Lync.Client.PreAuth.LwaClient&quot; Async=&quot;true&quot; %&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Browsing to this ASPX file is indeed possible without further authentication needed as also indicated by the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;PreAuth&lt;/code&gt; key word being part of the namespace.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/skypethings/skype_lwaaspx.png&quot; alt=&quot;LWA_ASPX&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;We attach &lt;em&gt;dnSpy&lt;/em&gt; to our &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;w3wp.exe&lt;/code&gt; process with the App Pool &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;LyncExtFeature&lt;/code&gt; and load all .NET assemblies/modules into the debugger.
+Looking into the class &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Lync.Client.PreAuth.LwaClient&lt;/code&gt; reveals that it inherits from &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;System.Web.UI.Page&lt;/code&gt; so we can usually expect several methods like &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Page_Init&lt;/code&gt; and/or &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Page_Load&lt;/code&gt; being implemented (see any blog on “ASP.NET Page Life Cycle”).&lt;/p&gt;
+
+&lt;p&gt;But the most interesting implementation is an asynchronous one called &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;PageLoadInternal()&lt;/code&gt;. Several user-controlled
+parameter are easily spotted in the first lines of code &lt;em&gt;[1], [2]&lt;/em&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-csharp highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;base&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;QueryString&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Count&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+		&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;LwaLocale&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;HttpUtility&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;UrlDecode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;base&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;QueryString&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;reachLocale&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[1]&lt;/span&gt;
+		&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;joinXml&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;LwaClient&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;Base64DecodeString&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;base&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;QueryString&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;xml&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[2]&lt;/span&gt;
+		&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;If no query parameter &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;xml&lt;/code&gt; is provided, the following if-statement turns out to be &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;true&lt;/code&gt; &lt;em&gt;[3]&lt;/em&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-csharp highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;IsNullOrEmpty&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;joinXml&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[3]&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+			&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Wpp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tracer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Level&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;gt;=&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;5&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Wpp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tracer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Flags&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+			&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+				&lt;span class=&quot;n&quot;&gt;WPP_2897018b9080d7ca34b73bbf6c519b5b&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;WPP_p&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;10&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;IntPtr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;GetHashCode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;());&lt;/span&gt;
+			&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+			&lt;span class=&quot;k&quot;&gt;try&lt;/span&gt;
+			&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+				&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;meetUrl&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;LwaClient&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;Base64DecodeString&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;base&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;QueryString&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;meeturl&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[4]&lt;/span&gt;
+			&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The query parameter &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;meeturl&lt;/code&gt; now get evaluated at &lt;em&gt;[4]&lt;/em&gt; and we’re almost there, looking at the SSRF.&lt;/p&gt;
+
+&lt;div class=&quot;language-csharp highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;CmsLWAValidateMeetUrlFlag&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+					&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;ValidateMeetUrl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;meetUrl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[5]&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;HttpWebRequest&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;request&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;HttpWebRequest&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;WebRequest&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;Create&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;meetUrl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[6]&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Accept&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;Application/vnd.microsoft.lync.meeting+xml&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;UserAgent&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;LCS-Server&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;using&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;HttpWebResponse&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;response&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;HttpWebResponse&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;await&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;GetResponseAsync&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()))&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[7]&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;using&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;StreamReader&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;reader&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;StreamReader&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;response&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;GetResponseStream&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()))&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;joinXml&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;await&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;reader&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;ReadToEndAsync&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;reader&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;Close&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;response&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;Close&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Some kind of &lt;em&gt;validation&lt;/em&gt; in &lt;em&gt;[5]&lt;/em&gt; seems to take place. We’ll look into this in a minute.
+If the validation turns out to be successful, an &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;HttpWebRequest&lt;/code&gt; object is created &lt;em&gt;[6]&lt;/em&gt; and fires &lt;em&gt;[7]&lt;/em&gt;
+in an asynchronous manner. If we could inject an arbitrary URL with &lt;strong&gt;full control including query parameters&lt;/strong&gt; etc.,
+a powerful SSRF would have been born (a &lt;em&gt;blind&lt;/em&gt; one though). Thanks to the Base64 encoding, one doesn’t even
+have to take care (a lot) on weird characters etc.&lt;/p&gt;
+
+&lt;p&gt;But let’s investigate the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;ValidateMeetUrl&lt;/code&gt; &lt;em&gt;[5]&lt;/em&gt; method first.&lt;/p&gt;
+
+&lt;div class=&quot;language-csharp highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;private&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;ValidateMeetUrl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;meetUrl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+		&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Wpp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tracer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Level&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;gt;=&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;4&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Wpp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tracer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Flags&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+		&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+			&lt;span class=&quot;n&quot;&gt;WPP_2897018b9080d7ca34b73bbf6c519b5b&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;WPP_p&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;15&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;IntPtr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;GetHashCode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;());&lt;/span&gt;
+		&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+		&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pattern&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;(https?:\\/\\/(www\\.)|(www\\.))?.*(\\.\\w{2,4})\\/.*\\/[a-zA-Z0-9]*\\/?$&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[8]&lt;/span&gt;
+		&lt;span class=&quot;kt&quot;&gt;bool&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;flag&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Regex&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;IsMatch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;meetUrl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pattern&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+		&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;flag&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+		&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+			&lt;span class=&quot;k&quot;&gt;return&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+		&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+		&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pattern2&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;^(https?:\\/\\/(www\\.)|(www\\.))?.*(\\.\\w{2,4})\\/Meet\\/\\?.*\\/?$&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[9]&lt;/span&gt;
+		&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(!&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Regex&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;IsMatch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;meetUrl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pattern2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;
+		&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;It basically breaks down to defeat the regular expressions &lt;em&gt;[8]&lt;/em&gt; or &lt;em&gt;[9]&lt;/em&gt;. Intuitively, I chose the first one at &lt;em&gt;[8]&lt;/em&gt; (but does it matter? :-P). For this kind of regex testing, there are tons of online &lt;a href=&quot;https://www.regextester.com/&quot;&gt;regex testers&lt;/a&gt; available to play with expressions.&lt;/p&gt;
+
+&lt;p&gt;So it looks like the “idea” of this validation by the code author &lt;em&gt;could&lt;/em&gt; be based on the following thoughts (I’m just guessing here!). We do not differentiate between optional match groups for this interpretation.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Could be a valid domain name starting with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;http&lt;/code&gt; or &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;https&lt;/code&gt; (you’re stuck in the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;WebRequest&lt;/code&gt; cast indeed)&lt;/li&gt;
+  &lt;li&gt;Could contain a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;www&lt;/code&gt; prefix&lt;/li&gt;
+  &lt;li&gt;Domain could end with an TLD of length between &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;2&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;4&lt;/code&gt;, e.g. &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de, com, army&lt;/code&gt;&lt;/li&gt;
+  &lt;li&gt;Last segment could contain an alpha-numeric sequence and we need another slash in there&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;So things like this should work.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/skypethings/skype_regex1.png&quot; alt=&quot;Regex1&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;What about IP addresses? Since &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;www&lt;/code&gt; is optional but constraint &lt;em&gt;3.&lt;/em&gt; exists: the fourth octet cannot be a single digit.
+Alright, this constraint is not too hard. Enough IP addresses left to do something evil.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/skypethings/skype_regex2.png&quot; alt=&quot;Regex2&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;A bit later, I realized that this could also become optional. But see the difference between &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;https://10.0.0.1/whatever/iwant&lt;/code&gt; vs. &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;https://10.0.0.10/whatever/iwant&lt;/code&gt;? Sometimes, your mind is playing tricks on you. :-P&lt;/p&gt;
+
+&lt;p&gt;What about queries? Exploiting a third-party system at least should take into account arbitrary query parameters.
+Yes, works also fine since most web apps from my experience simply ignore additional undefined query parameters.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/skypethings/skype_regex3.png&quot; alt=&quot;Regex3&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Of course, if you already know the Windows Domain name (e.g. obtained from one of the Skype endpoints talking NTLM),
+common hostname prefixes like &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;jira.contoso.com&lt;/code&gt; are also possible. If you need some inspiration for &lt;em&gt;Exploiting Blind SSRF&lt;/em&gt;, I highly recommend &lt;a href=&quot;https://blog.assetnote.io/2021/01/13/blind-ssrf-chains/&quot;&gt;some&lt;/a&gt; &lt;a href=&quot;https://github.com/assetnote/blind-ssrf-chains&quot;&gt;resources&lt;/a&gt; by Assetnote.&lt;/p&gt;
+
+&lt;p&gt;After I showed this vulnerability to my teammates &lt;a href=&quot;https://twitter.com/codewhitesec&quot;&gt;@codewhitesec&lt;/a&gt;, a result in discussion with &lt;a href=&quot;https://twitter.com/mwulftange&quot;&gt;Markus&lt;/a&gt; ended in an even more beautiful regex breaker (of course the previous examples might work for most cases of exploitation cases as well).&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/skypethings/skype_regex4.png&quot; alt=&quot;Regex4&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;With this, we could basically control everything as needed. And since there are tons of vulnerable systems
+(especially in intranet corporate networks), such as routers, Jenkins, or lately VMware Workspace ONE Access (exploitable with a single GET request), this &lt;em&gt;Pre-Auth Blind SSRF&lt;/em&gt; should indeed be seen as an &lt;em&gt;internet perimeter leak&lt;/em&gt; threat.&lt;/p&gt;
+
+&lt;p&gt;Finally, what’s missing? Right, &lt;strong&gt;PoC||GTFO&lt;/strong&gt;.
+Our Skype server &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SKYPE01&lt;/code&gt; has the IP address &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;10.137.0.27&lt;/code&gt; (right). A second machine at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;10.137.0.26&lt;/code&gt; (left) sends the SSRF payload &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;https://skype01.contoso.com/lwa/Webpages/LwaClient.aspx?meeturl=aHR0cDovLzEwLjEzNy4wLjI2Lz9pZD1QT0MlMjV7MTMzNyoxMzM3fSMueHgvLw==&lt;/code&gt; and also provides an HTTP service so we’re able to receive HTTP requests and investigate the related log files.&lt;/p&gt;
+
+&lt;p&gt;For me it seemed easier to provide a nice screenshot with only two machines such that the attacker and victim machine
+happens to be the same at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;10.137.0.26&lt;/code&gt; but it doesn’t really matter. A well-known Struts2 RCE payload (CVE-2019-0230) was sent
+but any payload deliverable with a GET request is exploitable.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/skypethings/skype_poc.png&quot; alt=&quot;PoC&quot; /&gt;&lt;/p&gt;</content><author><name></name></author><category term="vulns4free" /><summary type="html">In my last blog post we talked about a new persistence technique in Skype for Business 2019 (SfB) found during my code audit. Now, I give a short code walk-through about an Pre-Auth Server-side Request Forgery (SSRF) vulnerability which could easily lead to an internet perimeter breach. But let’s start from the beginning.</summary></entry><entry><title type="html">Skype for Business Audit Part 1 - SKYPErsistence</title><link href="http://localhost:4000/vulns4free/2022/09/22/skype-audit-part1.html" rel="alternate" type="text/html" title="Skype for Business Audit Part 1 - SKYPErsistence" /><published>2022-09-22T23:00:00+02:00</published><updated>2022-09-22T23:00:00+02:00</updated><id>http://localhost:4000/vulns4free/2022/09/22/skype-audit-part1</id><content type="html" xml:base="http://localhost:4000/vulns4free/2022/09/22/skype-audit-part1.html">&lt;p&gt;In this blog post I’ll introduce the first of two findings affecting the latest patched version of &lt;strong&gt;Skype for Business 2019&lt;/strong&gt;.
 Here, we talk about a tool for &lt;em&gt;Red Teams&lt;/em&gt; helping to achieve &lt;strong&gt;persistence&lt;/strong&gt; on a Skype server
 with help of a (hopefully) new method.&lt;/p&gt;
 
