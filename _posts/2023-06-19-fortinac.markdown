@@ -8,7 +8,7 @@ categories: vulns4free
 >  FortiNAC is a zero-trust access solution that oversees and protects all digital assets connected to the enterprise network, covering devices from IT, IoT, OT/ICS to IoMT.
 > -- https://www.fortinet.com/products/network-access-control
 
-In Februar, 2023, a new vulnerability hit the mainstream news: **CVE-2022-39952** (see [FG-IR-22-300](https://www.fortiguard.com/psirt/FG-IR-22-300)). Exploitation allowed an unauthenticated attacker to achieve remote code execution (RCE) on **FortiNAC** devices **prior to version 9.4.1** through a chain targeting TCP port 8443. In short: an unprotected JSP file reachable via `/configWizard/keyUpload.jsp` allowed to upload a ZIP file which then got extracted to fully controlled paths.
+In February, 2023, a new vulnerability hit the mainstream news: **CVE-2022-39952** (see [FG-IR-22-300](https://www.fortiguard.com/psirt/FG-IR-22-300)). Exploitation allowed an unauthenticated attacker to achieve remote code execution (RCE) on **FortiNAC** devices **prior to version 9.4.1** through a chain targeting TCP port 8443. In short: an unprotected JSP file reachable via `/configWizard/keyUpload.jsp` allowed to upload a ZIP file which then got extracted to fully controlled paths.
 
 There is a nicely written [blog post by the Horizon3.ai team](https://www.horizon3.ai/fortinet-fortinac-cve-2022-39952-deep-dive-and-iocs/) explaining the chain with a proof-of-concept exploit being published on GitHub.
 
@@ -299,7 +299,7 @@ This seems to be some kind of custom packet format being processed, so we do hav
 
 At `[6]` our input flows into a `java.io.DataInputStream.DataInputStream` constructor. Then every line from `[7]` to `[10]` reads the next four bytes from the stream, then being interpreted as an `int`. `requestID, responseID, verb` and `len` will be relevant later but as you see, all of these are user-controlled.
 
-This is also the case for a packet hash, fetched from the stream at `[11]`. This is then compared to a `calcluatedHash` which...well consists of a calculation solely based on the other variables we control already.
+This is also the case for a packet hash, fetched from the stream at `[11]`. This is then compared to a `calculatedHash` which...well consists of a calculation solely based on the other variables we control already.
 
 At `[12]` then, the remaining data are read from the stream into the `compressedData` variable. Depending on the `verb`, there might be an additional *decryption routine*. That wouldn't hold as back of course because the secret key is *hard-coded* anyways...
 
