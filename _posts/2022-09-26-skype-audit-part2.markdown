@@ -5,6 +5,8 @@ date:   2022-09-26 23:00:00 +0200
 categories: vulns4free
 ---
 
+> Update 2023-10-10: After a year, Microsoft decided to provide a patch for this - [CVE-2023-41763](https://msrc.microsoft.com/update-guide/en-US/advisory/CVE-2023-41763)
+
 In my last [blog post](https://frycos.github.io/vulns4free/2022/09/22/skype-audit-part1.html) we talked about a new *persistence technique* in **Skype for Business 2019 (SfB)** found during my code audit. Now, I give a short code walk-through
 about an **Pre-Auth Server-side Request Forgery (SSRF)** vulnerability which could easily lead to an internet perimeter breach.
 But let's start from the beginning.
