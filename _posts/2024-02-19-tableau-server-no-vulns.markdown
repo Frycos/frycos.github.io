@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Tableau Server - There Ain't No Vulns"
-date:   2024-02-19 01:00:00 +0200
+date:   2024-02-19 03:00:00 +0200
 categories: vulns4free
 ---
 
