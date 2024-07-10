@@ -51,7 +51,7 @@ The first relevant part is shown next.
 </aspNetCore>
 ```
 
-We find a process running from `C:\inetpub\wwwroot\BC230\Prod.Client.WebCoreApp.exe`. This process seems to based on
+We find a process running from `C:\inetpub\wwwroot\BC230\Prod.Client.WebCoreApp.exe`. This process seems to be based on
 ASP.NET Core and the `hostingModel` equals to `OutOfProcess`. Looking at more [Microsoft documentation](https://learn.microsoft.com/en-us/aspnet/core/host-and-deploy/iis/?view=aspnetcore-8.0), I learnt that
 an application can run in two modes with IIS: *in-process* or *out-of-process*.
 
@@ -186,7 +186,7 @@ I spent several days within this library and tried finding ways to invoke arbitr
 #### Hunting for Json Deserialization
 
 Looking through this code base and listing the Assembly references of this library pointed me to another well-known JSON library: *Newtonsoft.Json*. One of my browser tabs always holds one great research paper: [Friday the 13th JSON Attacks](https://www.blackhat.com/docs/us-17/thursday/us-17-Munoz-Friday-The-13th-JSON-Attacks-wp.pdf) by Alvaro Muñoz and Oleksandr Mirosh. Exploitation of *Newtonsoft.Json* deserializers (and others) was explained in great detail and basically
-comes to this: one has to control the type for the objects being deserialized on the other end of the wire. Type information is only included if explicitly stated via `Newtonsoft.Json.TypeNameHandling` values other than `None`.
+comes down to this: one has to control the type for the objects being deserialized on the other end of the wire. Type information is only included if explicitly stated via `Newtonsoft.Json.TypeNameHandling` values other than `None`.
 
 So let's search for some candidates. A first hit found by looking at dnSpy Analyzer trees is `System.Object Microsoft.Dynamics.Nav.Types.JsonTypeHintHelper::Read(Newtonsoft.Json.JsonReader,Newtonsoft.Json.JsonSerializer,Microsoft.Dynamics.Nav.Types.JsonTypeHint)`. A custom class with the following code.
 
@@ -336,7 +336,7 @@ So, I found an interesting call chain all the way back to `Microsoft.Dynamics.Na
 ### Back to the Drawing Board
 
 I realized that a lot of potentially interesting calls led to nowhere, so let's change the audit methods a little bit.
-If you're getting lost in tons and thousands of line of code, use another tool. I chose *Wireshark* because why would all this dead code even exist?
+If you're getting lost in tons and thousands of lines of code, use another tool. I chose *Wireshark* because why would all this dead code even exist?
 
 > **Advice #10**: Use different tools for taking a different perspective on the same problem.
 
@@ -789,7 +789,7 @@ Alright, the type `AssemblyInstaller` was not found but what's more satisfying: 
 
 In "Hunting for Json Deserialization" I also mentioned a few outstanding research references on Json deserialization. We learn from them that Json serializers use various algorithms trying to reconstruct an object from a serialized representation. Calling constructors are used a lot by gadget re*search*ers but also Setters. Of course there are more variants but we'll focus on the most successful methods so far. I actually did some deep-dive into the Newtonsoft Json serializer and was surprised how flexible, creative and powerful it is. Just one example which I didn't know (and hear about) before: the deserialization processor could utilize a parameterized constructor to create the object with one or few predefined fields from the serialization stream. If there are more fields, not being part of a constructor definition, it searches for Setters additionally.
 
-> **Advice #13**: From time time it's a good idea to make a deep-dive into 3rd party library code bases. For a better understanding of its inner workings, but also to strengthen your knowledge base.
+> **Advice #13**: From time to time it's a good idea to make a deep-dive into 3rd party library code bases. For a better understanding of its inner workings, but also to strengthen your knowledge base.
 
 And now the pain begins: searching for a gadget with could pass the SerializationBinder based on members of the allow list.
 You could now go through the classes of each namespace in dnSpy.
